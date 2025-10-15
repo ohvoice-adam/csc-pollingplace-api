@@ -104,75 +104,77 @@ class BasePlugin(ABC):
             - errors: int - Number of errors
             - timestamp: str - ISO format timestamp
         """
-        try:
-            self.app.logger.info(f"Starting sync for plugin: {self.name}")
+        with self.app.app_context():
+            try:
+                self.app.logger.info(f"Starting sync for plugin: {self.name}")
 
-            # Import here to avoid circular imports
-            from app import PollingPlace
+                # Import here to avoid circular imports
+                from app import PollingPlace
 
-            # Fetch data from source
-            polling_places_data = self.fetch_polling_places()
+                # Fetch data from source
+                polling_places_data = self.fetch_polling_places()
 
-            added = 0
-            updated = 0
-            errors = 0
+                added = 0
+                updated = 0
+                errors = 0
 
-            for data in polling_places_data:
-                try:
-                    # Add source tracking
-                    data['source_state'] = self.state_code
-                    data['source_plugin'] = self.name
+                for data in polling_places_data:
+                    try:
+                        # Add source tracking
+                        data['source_state'] = self.state_code
+                        data['source_plugin'] = self.name
 
-                    # Check if record exists
-                    existing = PollingPlace.query.get(data['id'])
+                        # Check if record exists
+                        existing = self.db.session.get(PollingPlace, data['id'])
 
-                    if existing:
-                        # Update existing record
-                        for key, value in data.items():
-                            setattr(existing, key, value)
-                        updated += 1
-                    else:
-                        # Create new record
-                        new_location = PollingPlace(**data)
-                        self.db.session.add(new_location)
-                        added += 1
+                        if existing:
+                            # Update existing record
+                            for key, value in data.items():
+                                if hasattr(existing, key):
+                                    setattr(existing, key, value)
+                            updated += 1
+                        else:
+                            # Create new record
+                            new_location = PollingPlace(**data)
+                            self.db.session.add(new_location)
+                            added += 1
 
-                except Exception as e:
-                    self.app.logger.error(f"Error processing record: {e}")
-                    errors += 1
-                    self.error_count += 1
+                    except Exception as e:
+                        self.app.logger.error(f"Error processing record: {e}")
+                        errors += 1
+                        self.error_count += 1
 
-            # Commit changes
-            self.db.session.commit()
+                # Commit changes
+                self.db.session.commit()
 
-            # Update sync stats
-            self.last_sync = datetime.utcnow()
-            self.sync_count += 1
+                # Update sync stats
+                self.last_sync = datetime.utcnow()
+                self.sync_count += 1
 
-            result = {
-                'success': True,
-                'message': f'Successfully synced data for {self.state_code}',
-                'added': added,
-                'updated': updated,
-                'errors': errors,
-                'timestamp': self.last_sync.isoformat()
-            }
+                result = {
+                    'success': True,
+                    'message': f'Successfully synced data for {self.state_code}',
+                    'added': added,
+                    'updated': updated,
+                    'errors': errors,
+                    'timestamp': self.last_sync.isoformat()
+                }
 
-            self.app.logger.info(f"Sync completed for {self.name}: {result}")
-            return result
+                self.app.logger.info(f"Sync completed for {self.name}: {result}")
+                return result
 
-        except Exception as e:
-            self.error_count += 1
-            error_msg = f"Error syncing {self.name}: {str(e)}"
-            self.app.logger.error(error_msg)
-            return {
-                'success': False,
-                'message': error_msg,
-                'added': 0,
-                'updated': 0,
-                'errors': 1,
-                'timestamp': datetime.utcnow().isoformat()
-            }
+            except Exception as e:
+                self.error_count += 1
+                error_msg = f"Error syncing {self.name}: {str(e)}"
+                self.app.logger.error(error_msg)
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'added': 0,
+                    'updated': 0,
+                    'errors': 1,
+                    'timestamp': datetime.utcnow().isoformat()
+                }
 
     def get_status(self) -> Dict[str, Any]:
         """
