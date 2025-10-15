@@ -1,0 +1,175 @@
+"""
+Dummy Plugin - Generates fake polling place data for testing
+
+This plugin generates realistic-looking but fake polling place data for any state.
+It's useful for testing, demonstrations, and development purposes.
+"""
+
+import random
+from typing import List, Dict, Any
+from plugins.base_plugin import BasePlugin
+
+
+class DummyPlugin(BasePlugin):
+    """
+    Dummy plugin that generates fake polling place data for testing.
+    Generates data for all 50 US states.
+    """
+
+    # Sample location names for generating fake data
+    LOCATION_TYPES = [
+        'Elementary School', 'Middle School', 'High School', 'Community Center',
+        'Public Library', 'Fire Station', 'City Hall', 'Recreation Center',
+        'Senior Center', 'Church', 'Civic Center', 'Town Hall'
+    ]
+
+    STREET_NAMES = [
+        'Main St', 'Oak Ave', 'Maple Dr', 'Washington Blvd', 'Lincoln Way',
+        'Park Ave', 'Cedar Ln', 'Elm St', 'Pine Rd', 'Valley View Dr',
+        'Highland Ave', 'River Rd', 'Lake St', 'Hill Dr', 'Sunset Blvd'
+    ]
+
+    CITY_PREFIXES = [
+        'Spring', 'River', 'Lake', 'Oak', 'Pine', 'Cedar', 'Maple',
+        'Green', 'Fair', 'Pleasant', 'Sun', 'Silver', 'Golden'
+    ]
+
+    CITY_SUFFIXES = [
+        'field', 'ville', 'town', 'dale', 'wood', 'haven', 'port',
+        'view', 'side', 'ridge', 'valley', 'springs'
+    ]
+
+    # US State codes and names
+    STATES = {
+        'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+        'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+        'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+        'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+        'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+        'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+        'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+        'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+        'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+        'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+        'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+        'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+        'WI': 'Wisconsin', 'WY': 'Wyoming'
+    }
+
+    @property
+    def name(self) -> str:
+        return 'dummy'
+
+    @property
+    def state_code(self) -> str:
+        return 'ALL'
+
+    @property
+    def description(self) -> str:
+        return 'Dummy plugin that generates fake polling place data for testing (all states)'
+
+    def generate_fake_city(self) -> str:
+        """Generate a fake city name"""
+        prefix = random.choice(self.CITY_PREFIXES)
+        suffix = random.choice(self.CITY_SUFFIXES)
+        return f"{prefix}{suffix}"
+
+    def generate_fake_address(self) -> tuple:
+        """Generate a fake address (street number + street name)"""
+        number = random.randint(100, 9999)
+        street = random.choice(self.STREET_NAMES)
+        return f"{number} {street}"
+
+    def generate_fake_coordinates(self) -> tuple:
+        """
+        Generate fake but realistic coordinates within US bounds
+        Latitude: 24.5° to 49.4° (continental US)
+        Longitude: -125° to -66° (continental US)
+        """
+        lat = round(random.uniform(24.5, 49.4), 6)
+        lng = round(random.uniform(-125.0, -66.0), 6)
+        return (lat, lng)
+
+    def generate_fake_polling_hours(self) -> str:
+        """Generate fake polling hours"""
+        start_hour = random.choice([6, 7, 8])
+        end_hour = random.choice([19, 20, 21])
+        return f"{start_hour}:00 AM - {end_hour % 12 or 12}:00 PM"
+
+    def generate_fake_location(self, state_code: str, location_id: int) -> Dict[str, Any]:
+        """Generate a single fake polling location"""
+        location_type = random.choice(self.LOCATION_TYPES)
+        location_name = f"{random.choice(['North', 'South', 'East', 'West', 'Central'])} {location_type}"
+        city = self.generate_fake_city()
+        address = self.generate_fake_address()
+        lat, lng = self.generate_fake_coordinates()
+        zip_code = f"{random.randint(10000, 99999)}"
+
+        # Add some variety to the data
+        has_notes = random.choice([True, False])
+        has_services = random.choice([True, False])
+        has_location_name = random.choice([True, False])
+
+        data = {
+            'id': f"{state_code}-{location_id:05d}",
+            'name': location_name,
+            'address_line1': address,
+            'city': city,
+            'state': state_code,
+            'zip_code': zip_code,
+            'latitude': lat,
+            'longitude': lng,
+            'polling_hours': self.generate_fake_polling_hours(),
+        }
+
+        # Add optional fields randomly
+        if has_location_name:
+            data['location_name'] = random.choice(['Main Entrance', 'Gymnasium', 'Cafeteria', 'Auditorium'])
+
+        if has_notes:
+            notes_options = [
+                'Wheelchair accessible',
+                'Parking available in rear lot',
+                'Enter through main entrance',
+                'Use side entrance on election day',
+                'ADA compliant facility'
+            ]
+            data['notes'] = random.choice(notes_options)
+
+        if has_services:
+            services = []
+            if random.choice([True, False]):
+                services.append('Early voting')
+            if random.choice([True, False]):
+                services.append('Ballot drop-off')
+            if random.choice([True, False]):
+                services.append('Voter registration')
+            if services:
+                data['voter_services'] = ', '.join(services)
+
+        return data
+
+    def fetch_polling_places(self) -> List[Dict[str, Any]]:
+        """
+        Generate fake polling place data for all US states.
+
+        Generates between 5-15 polling places per state.
+        """
+        polling_places = []
+
+        for state_code in self.STATES.keys():
+            # Generate between 5 and 15 locations per state
+            num_locations = random.randint(5, 15)
+
+            for i in range(num_locations):
+                location = self.generate_fake_location(state_code, i + 1)
+
+                # Validate the data
+                if self.validate_polling_place_data(location):
+                    polling_places.append(location)
+
+        self.app.logger.info(
+            f"Generated {len(polling_places)} fake polling places across {len(self.STATES)} states"
+        )
+
+        return polling_places

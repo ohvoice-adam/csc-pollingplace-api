@@ -28,11 +28,29 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configuration
-# Use SQLite database stored in /data directory (persistent in Docker volume)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL',
-    'sqlite:////data/pollingplaces.db'
-)
+# Database setup - supports both SQLite and PostgreSQL/Cloud SQL
+db_type = os.getenv('DB_TYPE', 'sqlite').lower()
+
+if db_type == 'postgresql' or db_type == 'postgres':
+    # PostgreSQL configuration
+    db_user = os.getenv('DB_USER', 'postgres')
+    db_password = os.getenv('DB_PASSWORD', '')
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_port = os.getenv('DB_PORT', '5432')
+    db_name = os.getenv('DB_NAME', 'pollingplaces')
+    
+    # Check if using Cloud SQL Unix socket
+    if db_host.startswith('/cloudsql/'):
+        # Cloud SQL with Unix socket
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@/{db_name}?host={db_host}'
+    else:
+        # Standard PostgreSQL connection
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+else:
+    # Default to SQLite
+    sqlite_path = os.getenv('SQLITE_PATH', '/data/pollingplaces.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{sqlite_path}'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JSON_SORT_KEYS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
@@ -288,9 +306,42 @@ def health():
     try:
         # Test database connection
         db.session.execute(db.text('SELECT 1'))
-        return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+        
+        # Get database type and connection info
+        db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+        if db_uri.startswith('sqlite'):
+            db_type = 'SQLite'
+            db_path = db_uri.replace('sqlite:///', '')
+            db_info = f"SQLite at {db_path}"
+        elif db_uri.startswith('postgresql'):
+            db_type = 'PostgreSQL'
+            if '?host=/cloudsql/' in db_uri:
+                # Cloud SQL connection
+                instance = db_uri.split('?host=')[1]
+                db_info = f"Cloud SQL at {instance}"
+            else:
+                # Standard PostgreSQL connection
+                db_info = "PostgreSQL database"
+        else:
+            db_type = "Unknown"
+            db_info = db_uri.split('://')[0]
+            
+        return jsonify({
+            'status': 'healthy', 
+            'database': {
+                'connected': True,
+                'type': db_type,
+                'info': db_info
+            }
+        }), 200
     except Exception as e:
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+        return jsonify({
+            'status': 'unhealthy', 
+            'database': {
+                'connected': False,
+                'error': str(e)
+            }
+        }), 500
 
 
 @app.route('/api/keys', methods=['POST'])

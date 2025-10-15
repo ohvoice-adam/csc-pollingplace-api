@@ -147,6 +147,40 @@ State-specific data sources may include:
 - Ensure data format matches the expected structure
 - Use `validate_polling_place_data()` to check data validity
 
+## Built-in Plugins
+
+### Dummy Plugin
+
+The **Dummy Plugin** (`dummy.py`) is included for testing and development purposes. It generates realistic-looking fake polling place data for all 50 US states.
+
+**Features:**
+- Generates 5-15 random polling locations per state
+- Creates realistic fake data including:
+  - Location names (schools, community centers, libraries, etc.)
+  - Addresses with street numbers and names
+  - Cities with random prefixes and suffixes
+  - Valid US coordinates (latitude/longitude in WGS 84 format)
+  - Polling hours with typical opening times
+  - Optional notes and voter services
+- Validates all generated data before returning
+- Perfect for testing API endpoints and integrations
+
+**Usage:**
+```bash
+# List plugins (should show dummy plugin with state_code='ALL')
+curl -H "X-API-Key: your-key" http://localhost:8080/api/plugins
+
+# Sync dummy plugin to generate test data
+curl -X POST -H "X-API-Key: your-key" \
+  http://localhost:8080/api/plugins/dummy/sync
+
+# View generated data for a specific state
+curl -H "X-API-Key: your-key" \
+  http://localhost:8080/api/polling-places?state=CA
+```
+
+**Note:** The dummy plugin generates new random data each time it syncs. Data is not persistent between syncs unless stored in the database.
+
 ## Support
 
 For questions or issues with plugins, please open an issue on the GitHub repository.

@@ -96,16 +96,30 @@ The API will be available at `http://localhost:8080`
 gcloud builds submit --tag gcr.io/PROJECT-ID/csc-pollingplace-api
 ```
 
-2. Deploy to Cloud Run with volume for persistent database:
-```bash
-gcloud run deploy csc-pollingplace-api \
-  --image gcr.io/PROJECT-ID/csc-pollingplace-api \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
-  --execution-environment gen2
-```
+2. Deploy to Cloud Run:
+
+   a. With SQLite and volume for persistent storage:
+   ```bash
+   gcloud run deploy csc-pollingplace-api \
+     --image gcr.io/PROJECT-ID/csc-pollingplace-api \
+     --platform managed \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --set-env-vars DB_TYPE=sqlite,DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
+     --execution-environment gen2
+   ```
+
+   b. With Cloud SQL (recommended for production):
+   ```bash
+   gcloud run deploy csc-pollingplace-api \
+     --image gcr.io/PROJECT-ID/csc-pollingplace-api \
+     --platform managed \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --set-env-vars DB_TYPE=postgresql,DB_USER=postgres,DB_PASSWORD=your-password,DB_NAME=pollingplaces,DB_HOST=/cloudsql/PROJECT-ID:REGION:INSTANCE-NAME,DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
+     --add-cloudsql-instances PROJECT-ID:REGION:INSTANCE-NAME \
+     --execution-environment gen2
+   ```
 
 3. After deployment, access the admin interface:
 - Navigate to `https://your-cloud-run-url/admin`
@@ -113,19 +127,64 @@ gcloud run deploy csc-pollingplace-api \
 - Change the default password immediately
 - Create API keys for your applications
 
-**Note**: Cloud Run Gen2 supports volume mounting. For persistent SQLite database in production, consider using Cloud Storage FUSE or migrate to Cloud SQL for better scalability.
+### Database Configuration
+
+The API supports both SQLite (default) and PostgreSQL/Cloud SQL databases:
+
+#### SQLite (Default)
+```bash
+# In your .env file
+DB_TYPE=sqlite
+SQLITE_PATH=/data/pollingplaces.db
+```
+
+#### PostgreSQL or Cloud SQL
+```bash
+# In your .env file
+DB_TYPE=postgresql
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=pollingplaces
+
+# For Cloud SQL with Unix socket
+DB_HOST=/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME
+```
+
+**Note for Cloud Run**: While Cloud Run Gen2 supports volume mounting for SQLite, using Cloud SQL is recommended for production deployments for better scalability and reliability.
 
 ### Docker Deployment
 
 Run locally with Docker:
+
+1. With SQLite (default):
 ```bash
 docker build -t csc-pollingplace-api .
 docker run -d -p 8080:8080 \
   -v $(pwd)/data:/data \
+  -e DB_TYPE=sqlite \
   -e MASTER_API_KEY=your-secure-key \
   -e AUTO_SYNC_ENABLED=True \
   csc-pollingplace-api
 ```
+
+2. With PostgreSQL:
+```bash
+docker build -t csc-pollingplace-api .
+docker run -d -p 8080:8080 \
+  -e DB_TYPE=postgresql \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=your-password \
+  -e DB_HOST=host.docker.internal \
+  -e DB_PORT=5432 \
+  -e DB_NAME=pollingplaces \
+  -e MASTER_API_KEY=your-secure-key \
+  -e AUTO_SYNC_ENABLED=True \
+  csc-pollingplace-api
+```
+
+Note: When using PostgreSQL, make sure the database exists and is accessible from the container.
 
 ## Plugin Architecture
 
