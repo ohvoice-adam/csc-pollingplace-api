@@ -18,7 +18,9 @@ This API provides a centralized platform to:
 ## Technology Stack
 
 - **Framework**: Flask (Python)
-- **Database**: PostgreSQL
+- **Database**: SQLite (embedded, persistent storage via Docker volume)
+- **Authentication**: API Key-based with rate limiting
+- **Scheduling**: APScheduler for automated plugin syncs
 - **Deployment**: Google Cloud Run
 - **Container**: Docker
 
@@ -27,7 +29,6 @@ This API provides a centralized platform to:
 ### Prerequisites
 
 - Python 3.11+
-- PostgreSQL (for local development)
 - Docker (optional, for containerized development)
 
 ### Setup
@@ -49,18 +50,38 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+4. Create data directory for database:
+```bash
+mkdir -p /data
+# Or use a local directory: mkdir -p ./data
+```
+
+5. Set up environment variables:
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-5. Run the application:
+6. Generate a master API key:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+# Copy the output and add it to .env as MASTER_API_KEY
+```
+
+7. Run the application:
 ```bash
 python app.py
 ```
 
 The API will be available at `http://localhost:8080`
+
+8. Create your first API key:
+```bash
+curl -X POST http://localhost:8080/api/keys \
+  -H "X-API-Key: YOUR_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Development Key"}'
+```
 
 ## Deployment to Google Cloud Run
 
@@ -77,13 +98,29 @@ The API will be available at `http://localhost:8080`
 gcloud builds submit --tag gcr.io/PROJECT-ID/csc-pollingplace-api
 ```
 
-2. Deploy to Cloud Run:
+2. Deploy to Cloud Run with volume for persistent database:
 ```bash
 gcloud run deploy csc-pollingplace-api \
   --image gcr.io/PROJECT-ID/csc-pollingplace-api \
   --platform managed \
   --region us-central1 \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --set-env-vars MASTER_API_KEY=your-secure-key,AUTO_SYNC_ENABLED=True \
+  --execution-environment gen2
+```
+
+**Note**: Cloud Run Gen2 supports volume mounting. For persistent SQLite database in production, consider using Cloud Storage FUSE or migrate to Cloud SQL for better scalability.
+
+### Docker Deployment
+
+Run locally with Docker:
+```bash
+docker build -t csc-pollingplace-api .
+docker run -d -p 8080:8080 \
+  -v $(pwd)/data:/data \
+  -e MASTER_API_KEY=your-secure-key \
+  -e AUTO_SYNC_ENABLED=True \
+  csc-pollingplace-api
 ```
 
 ## Plugin Architecture
@@ -124,29 +161,101 @@ class CaliforniaPlugin(BasePlugin):
 
 Save this as `plugins/california.py` and it will be automatically loaded.
 
+## Authentication
+
+All API endpoints (except health checks) require authentication via API key.
+
+### Getting Started
+
+1. Use the master API key to create new API keys
+2. Include API key in requests via `X-API-Key` header
+3. Rate limits apply per API key
+
+### Example Request
+```bash
+curl -H "X-API-Key: your-api-key-here" \
+  http://localhost:8080/api/polling-places?state=CA&format=vip
+```
+
+## Rate Limiting
+
+Default rate limits per API key:
+- **200 requests per day**
+- **50 requests per hour**
+
+Endpoint-specific limits:
+- Polling place queries: 100/hour
+- Plugin listing: 50/hour
+- Plugin sync: 10/hour
+
+**Note**: API key management endpoints (create, list, revoke) have no rate limits.
+
+Custom rate limits can be set per API key during creation.
+
+## Automated Scheduling
+
+Enable automated syncing of all plugins by setting environment variables:
+```bash
+AUTO_SYNC_ENABLED=True
+SYNC_INTERVAL_HOURS=24  # Default: sync every 24 hours
+```
+
+When enabled, all state plugins will automatically sync on the specified interval.
+
 ## API Endpoints
+
+### Authentication & API Keys
+
+**POST /api/keys**
+- Create a new API key (requires master API key)
+- Headers: `X-API-Key: <master-key>`
+- Body: `{"name": "Description", "rate_limit_per_day": 500, "rate_limit_per_hour": 100}`
+- Returns: New API key details
+- No rate limit
+
+**GET /api/keys**
+- List all API keys (requires valid API key)
+- Headers: `X-API-Key: <your-key>`
+- No rate limit
+
+**DELETE /api/keys/:id**
+- Revoke an API key (requires valid API key)
+- Headers: `X-API-Key: <your-key>`
+- No rate limit
 
 ### Polling Places
 
+All endpoints require authentication.
+
 **GET /api/polling-places**
 - Get all polling places
+- Headers: `X-API-Key: <your-key>`
 - Query parameters:
   - `state`: Filter by state code (e.g., `?state=CA`)
   - `format`: Response format - `vip` or `standard` (default: `standard`)
+- Rate limit: 100/hour
 
 **GET /api/polling-places/:id**
 - Get a specific polling place by ID
+- Headers: `X-API-Key: <your-key>`
 - Query parameters:
   - `format`: Response format - `vip` or `standard` (default: `standard`)
+- Rate limit: 100/hour
 
 ### Plugins
 
+All endpoints require authentication.
+
 **GET /api/plugins**
 - List all loaded plugins and their status
+- Headers: `X-API-Key: <your-key>`
+- Rate limit: 50/hour
 
 **POST /api/plugins/:name/sync**
 - Trigger a data sync for a specific plugin
+- Headers: `X-API-Key: <your-key>`
 - Example: `POST /api/plugins/california/sync`
+- Rate limit: 10/hour
 
 ### VIP Format Example
 

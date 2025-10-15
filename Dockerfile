@@ -9,11 +9,13 @@ ENV PYTHONUNBUFFERED=1 \
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (gcc needed for some Python packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
+
+# Create data directory for SQLite database
+RUN mkdir -p /data && chmod 777 /data
 
 # Copy requirements file
 COPY requirements.txt .
@@ -26,6 +28,9 @@ COPY . .
 
 # Expose port (Cloud Run uses PORT environment variable)
 EXPOSE 8080
+
+# Volume for persistent database storage
+VOLUME ["/data"]
 
 # Run the application with gunicorn
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
