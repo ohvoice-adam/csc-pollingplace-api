@@ -153,13 +153,13 @@ class DummyPlugin(BasePlugin):
         """
         Generate fake polling place data for all US states.
 
-        Generates between 5-15 polling places per state.
+        Generates at least 1000 polling places per state.
         """
         polling_places = []
 
         for state_code in self.STATES.keys():
-            # Generate between 5 and 15 locations per state
-            num_locations = random.randint(5, 15)
+            # Generate between 1000 and 1200 locations per state
+            num_locations = random.randint(1000, 1200)
 
             for i in range(num_locations):
                 location = self.generate_fake_location(state_code, i + 1)
@@ -179,15 +179,21 @@ class DummyPlugin(BasePlugin):
         Generate fake precinct data for all US states.
 
         Generates 3-8 precincts per polling place.
+        On subsequent syncs, randomly reassigns ~10% of precincts to simulate changes.
         """
-        # First, we need to get the polling places from the database to assign precincts to them
-        # For the dummy plugin, we'll generate precincts based on the expected polling places
+        # Import here to avoid circular imports
+        from app import Precinct, PollingPlace
+
+        # Check if we have existing precincts (to simulate changes)
+        existing_precincts = self.db.session.query(Precinct).all()
+        existing_precinct_map = {p.id: p for p in existing_precincts}
+
         precincts = []
         precinct_counter = 1
 
         for state_code in self.STATES.keys():
-            # Generate between 5 and 15 polling places per state (matching fetch_polling_places)
-            num_polling_places = random.randint(5, 15)
+            # Generate between 1000 and 1200 polling places per state (matching fetch_polling_places)
+            num_polling_places = random.randint(1000, 1200)
 
             # Generate county names for this state
             counties = [
@@ -196,6 +202,9 @@ class DummyPlugin(BasePlugin):
                 f"{random.choice(['North', 'South', 'East', 'West'])} County"
             ]
 
+            # Get all polling place IDs for this state to allow reassignment
+            all_polling_place_ids = [f"{state_code}-{i:05d}" for i in range(1, num_polling_places + 1)]
+
             for polling_place_num in range(1, num_polling_places + 1):
                 polling_place_id = f"{state_code}-{polling_place_num:05d}"
 
@@ -203,8 +212,27 @@ class DummyPlugin(BasePlugin):
                 num_precincts = random.randint(3, 8)
 
                 for precinct_num in range(1, num_precincts + 1):
+                    precinct_id = f"{state_code}-P-{precinct_counter:06d}"
+
+                    # Check if this precinct already exists
+                    if precinct_id in existing_precinct_map:
+                        existing_precinct = existing_precinct_map[precinct_id]
+
+                        # 10% chance to reassign to a different polling place (simulate change)
+                        if random.random() < 0.10:
+                            # Ensure we pick a different polling place
+                            new_polling_place_id = random.choice(all_polling_place_ids)
+                            while new_polling_place_id == existing_precinct.current_polling_place_id:
+                                new_polling_place_id = random.choice(all_polling_place_ids)
+
+                            polling_place_id = new_polling_place_id
+                            self.app.logger.debug(
+                                f"Reassigning {precinct_id} from "
+                                f"{existing_precinct.current_polling_place_id} to {polling_place_id}"
+                            )
+
                     precinct_data = {
-                        'id': f"{state_code}-P-{precinct_counter:06d}",
+                        'id': precinct_id,
                         'name': f"Precinct {precinct_num}",
                         'state': state_code,
                         'county': random.choice(counties),
