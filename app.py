@@ -8,11 +8,13 @@ compatible with Google Civic Data API.
 
 import os
 import secrets
+import bcrypt
 from datetime import datetime
 from functools import wraps
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
@@ -33,10 +35,16 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JSON_SORT_KEYS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
 
 # Initialize extensions
 CORS(app)
 db = SQLAlchemy(app)
+
+# Initialize login manager
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'admin_login'
 
 # Initialize rate limiter
 limiter = Limiter(
@@ -197,6 +205,39 @@ class APIKey(db.Model):
             'rate_limit_per_day': self.rate_limit_per_day,
             'rate_limit_per_hour': self.rate_limit_per_hour,
         }
+
+
+class AdminUser(UserMixin, db.Model):
+    """
+    Admin user model for web interface authentication
+    """
+    __tablename__ = 'admin_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    last_login_at = db.Column(db.DateTime)
+
+    def set_password(self, password):
+        """Hash and set password"""
+        self.password_hash = bcrypt.hashpw(
+            password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
+
+    def check_password(self, password):
+        """Check if password matches hash"""
+        return bcrypt.checkpw(
+            password.encode('utf-8'),
+            self.password_hash.encode('utf-8')
+        )
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user for Flask-Login"""
+    return AdminUser.query.get(int(user_id))
 
 
 # Authentication decorator
@@ -398,6 +439,131 @@ def sync_plugin(plugin_name):
         return jsonify({'error': str(e)}), 500
 
 
+# Admin Web Interface Routes
+@app.route('/admin')
+@app.route('/admin/')
+def admin_redirect():
+    """Redirect /admin to /admin/login or /admin/dashboard"""
+    if current_user.is_authenticated:
+        return redirect(url_for('admin_dashboard'))
+    return redirect(url_for('admin_login'))
+
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    """Admin login page"""
+    if current_user.is_authenticated:
+        return redirect(url_for('admin_dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        user = AdminUser.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
+            login_user(user)
+            user.last_login_at = datetime.utcnow()
+            db.session.commit()
+            flash('Login successful!', 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash('Invalid username or password', 'error')
+
+    return render_template('admin/login.html')
+
+
+@app.route('/admin/logout')
+@login_required
+def admin_logout():
+    """Admin logout"""
+    logout_user()
+    flash('You have been logged out', 'info')
+    return redirect(url_for('admin_login'))
+
+
+@app.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    """Admin dashboard - manage API keys"""
+    api_keys = APIKey.query.order_by(APIKey.created_at.desc()).all()
+    return render_template('admin/dashboard.html', api_keys=api_keys)
+
+
+@app.route('/admin/keys/create', methods=['POST'])
+@login_required
+def admin_create_key():
+    """Create a new API key from admin interface"""
+    name = request.form.get('name')
+    rate_limit_per_day = request.form.get('rate_limit_per_day')
+    rate_limit_per_hour = request.form.get('rate_limit_per_hour')
+
+    if not name:
+        flash('API key name is required', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    new_key = APIKey(
+        key=APIKey.generate_key(),
+        name=name,
+        rate_limit_per_day=int(rate_limit_per_day) if rate_limit_per_day else None,
+        rate_limit_per_hour=int(rate_limit_per_hour) if rate_limit_per_hour else None
+    )
+
+    db.session.add(new_key)
+    db.session.commit()
+
+    flash(f'API key created successfully: {new_key.key}', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/keys/<int:key_id>/revoke', methods=['POST'])
+@login_required
+def admin_revoke_key(key_id):
+    """Revoke an API key from admin interface"""
+    key = APIKey.query.get_or_404(key_id)
+    key.is_active = False
+    db.session.commit()
+
+    flash(f'API key "{key.name}" has been revoked', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/keys/<int:key_id>/activate', methods=['POST'])
+@login_required
+def admin_activate_key(key_id):
+    """Reactivate an API key from admin interface"""
+    key = APIKey.query.get_or_404(key_id)
+    key.is_active = True
+    db.session.commit()
+
+    flash(f'API key "{key.name}" has been activated', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/change-password', methods=['GET', 'POST'])
+@login_required
+def admin_change_password():
+    """Change admin password"""
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        if not current_user.check_password(current_password):
+            flash('Current password is incorrect', 'error')
+        elif new_password != confirm_password:
+            flash('New passwords do not match', 'error')
+        elif len(new_password) < 8:
+            flash('New password must be at least 8 characters', 'error')
+        else:
+            current_user.set_password(new_password)
+            db.session.commit()
+            flash('Password changed successfully', 'success')
+            return redirect(url_for('admin_dashboard'))
+
+    return render_template('admin/change_password.html')
+
+
 # Scheduling functions
 def sync_all_plugins_job():
     """Background job to sync all plugins"""
@@ -410,6 +576,18 @@ def sync_all_plugins_job():
 # Create tables and initialize
 with app.app_context():
     db.create_all()
+
+    # Initialize default admin user if none exists
+    if AdminUser.query.count() == 0:
+        default_password = os.getenv('DEFAULT_ADMIN_PASSWORD', 'admin123')
+        admin = AdminUser(username='admin')
+        admin.set_password(default_password)
+        db.session.add(admin)
+        db.session.commit()
+        app.logger.warning(
+            f"Created default admin user with username 'admin' and password '{default_password}'. "
+            "Please change the password immediately at /admin/change-password"
+        )
 
     # Initialize plugin manager after models are defined
     global plugin_manager

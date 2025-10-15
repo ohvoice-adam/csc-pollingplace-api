@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - CSC Polling Place API</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            color: #555;
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        td {
+            font-size: 14px;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .api-key {
+            font-family: 'Courier New', monospace;
+            background: #f4f4f4;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .actions {
+            display: flex;
+            gap: 5px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Admin Dashboard</h1>
+            <div class="header-actions">
+                <a href="{{ url_for('admin_change_password') }}" class="btn btn-secondary">Change Password</a>
+                <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <h2>Create New API Key</h2>
+            <form method="POST" action="{{ url_for('admin_create_key') }}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Key Name / Description *</label>
+                        <input type="text" id="name" name="name" required placeholder="e.g., Mobile App Key">
+                    </div>
+                    <div class="form-group">
+                        <label for="rate_limit_per_day">Rate Limit (per day)</label>
+                        <input type="number" id="rate_limit_per_day" name="rate_limit_per_day" placeholder="Default: 200">
+                    </div>
+                    <div class="form-group">
+                        <label for="rate_limit_per_hour">Rate Limit (per hour)</label>
+                        <input type="number" id="rate_limit_per_hour" name="rate_limit_per_hour" placeholder="Default: 50">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create API Key</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>API Keys ({{ api_keys|length }})</h2>
+            {% if api_keys %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>API Key</th>
+                            <th>Status</th>
+                            <th>Rate Limits</th>
+                            <th>Created</th>
+                            <th>Last Used</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key in api_keys %}
+                        <tr>
+                            <td><strong>{{ key.name }}</strong></td>
+                            <td><div class="api-key">{{ key.key }}</div></td>
+                            <td>
+                                {% if key.is_active %}
+                                    <span class="status-badge status-active">Active</span>
+                                {% else %}
+                                    <span class="status-badge status-inactive">Revoked</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if key.rate_limit_per_day or key.rate_limit_per_hour %}
+                                    {{ key.rate_limit_per_day or 'Default' }}/day<br>
+                                    {{ key.rate_limit_per_hour or 'Default' }}/hour
+                                {% else %}
+                                    Default
+                                {% endif %}
+                            </td>
+                            <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') if key.created_at else 'N/A' }}</td>
+                            <td>{{ key.last_used_at.strftime('%Y-%m-%d %H:%M') if key.last_used_at else 'Never' }}</td>
+                            <td>
+                                <div class="actions">
+                                    {% if key.is_active %}
+                                        <form method="POST" action="{{ url_for('admin_revoke_key', key_id=key.id) }}" style="display: inline;">
+                                            <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Revoke this API key?')">Revoke</button>
+                                        </form>
+                                    {% else %}
+                                        <form method="POST" action="{{ url_for('admin_activate_key', key_id=key.id) }}" style="display: inline;">
+                                            <button type="submit" class="btn btn-success btn-small">Activate</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color: #666; text-align: center; padding: 40px;">No API keys yet. Create one above to get started.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

@@ -75,13 +75,11 @@ python app.py
 
 The API will be available at `http://localhost:8080`
 
-8. Create your first API key:
-```bash
-curl -X POST http://localhost:8080/api/keys \
-  -H "X-API-Key: YOUR_MASTER_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Development Key"}'
-```
+8. Access the admin interface:
+- Open your browser to `http://localhost:8080/admin`
+- Login with username: `admin` and password: `admin123` (or your configured DEFAULT_ADMIN_PASSWORD)
+- **IMPORTANT**: Change the default password immediately at `/admin/change-password`
+- Create API keys through the web interface
 
 ## Deployment to Google Cloud Run
 
@@ -105,9 +103,15 @@ gcloud run deploy csc-pollingplace-api \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars MASTER_API_KEY=your-secure-key,AUTO_SYNC_ENABLED=True \
+  --set-env-vars DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
   --execution-environment gen2
 ```
+
+3. After deployment, access the admin interface:
+- Navigate to `https://your-cloud-run-url/admin`
+- Login with username `admin` and the password you set
+- Change the default password immediately
+- Create API keys for your applications
 
 **Note**: Cloud Run Gen2 supports volume mounting. For persistent SQLite database in production, consider using Cloud Storage FUSE or migrate to Cloud SQL for better scalability.
 
@@ -161,15 +165,45 @@ class CaliforniaPlugin(BasePlugin):
 
 Save this as `plugins/california.py` and it will be automatically loaded.
 
+## Admin Interface
+
+The API includes a web-based admin interface for managing API keys without needing command-line access.
+
+### First-Time Setup
+
+On first run, a default admin account is automatically created:
+- **Username**: `admin`
+- **Password**: `admin123` (or value of `DEFAULT_ADMIN_PASSWORD` env var)
+
+**🔒 IMPORTANT**: Change the default password immediately after first login at `/admin/change-password`
+
+### Accessing the Admin Panel
+
+1. Navigate to `http://your-domain/admin` in your browser
+2. Login with admin credentials
+3. From the dashboard you can:
+   - Create new API keys with custom rate limits
+   - View all API keys and their usage statistics
+   - Revoke or reactivate API keys
+   - Change your admin password
+
+### Features
+
+- **No Console Access Needed**: Perfect for Cloud Run deployments
+- **User-Friendly Interface**: Simple web UI for key management
+- **Secure**: Password hashing with bcrypt, session-based authentication
+- **Audit Trail**: Track key creation, last used timestamps
+
 ## Authentication
 
-All API endpoints (except health checks) require authentication via API key.
+All API endpoints (except health checks and admin interface) require authentication via API key.
 
 ### Getting Started
 
-1. Use the master API key to create new API keys
-2. Include API key in requests via `X-API-Key` header
-3. Rate limits apply per API key
+1. Login to the admin interface at `/admin`
+2. Create API keys through the web dashboard
+3. Include API key in requests via `X-API-Key` header
+4. Rate limits apply per API key
 
 ### Example Request
 ```bash
