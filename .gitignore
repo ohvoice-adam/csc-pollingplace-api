@@ -126,3 +126,11 @@ Thumbs.db
 # Google Cloud
 .gcloudignore
 *.log
+
+# Database
+data/
+*.db
+
+# IDE/Editor configs
+.zencoder/
+.claude/

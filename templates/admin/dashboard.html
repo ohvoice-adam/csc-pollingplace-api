@@ -206,11 +206,11 @@
                     </div>
                     <div class="form-group">
                         <label for="rate_limit_per_day">Rate Limit (per day)</label>
-                        <input type="number" id="rate_limit_per_day" name="rate_limit_per_day" placeholder="Default: 200">
+                        <input type="number" id="rate_limit_per_day" name="rate_limit_per_day" placeholder="Leave empty for unlimited">
                     </div>
                     <div class="form-group">
                         <label for="rate_limit_per_hour">Rate Limit (per hour)</label>
-                        <input type="number" id="rate_limit_per_hour" name="rate_limit_per_hour" placeholder="Default: 50">
+                        <input type="number" id="rate_limit_per_hour" name="rate_limit_per_hour" placeholder="Leave empty for unlimited">
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Create API Key</button>
@@ -246,10 +246,10 @@
                             </td>
                             <td>
                                 {% if key.rate_limit_per_day or key.rate_limit_per_hour %}
-                                    {{ key.rate_limit_per_day or 'Default' }}/day<br>
-                                    {{ key.rate_limit_per_hour or 'Default' }}/hour
+                                    {{ key.rate_limit_per_day or 'Unlimited' }}/day<br>
+                                    {{ key.rate_limit_per_hour or 'Unlimited' }}/hour
                                 {% else %}
-                                    Default
+                                    <strong>Unlimited</strong>
                                 {% endif %}
                             </td>
                             <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') if key.created_at else 'N/A' }}</td>

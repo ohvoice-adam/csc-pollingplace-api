@@ -272,18 +272,15 @@ curl -H "X-API-Key: your-api-key-here" \
 
 ## Rate Limiting
 
-Default rate limits per API key:
-- **200 requests per day**
-- **50 requests per hour**
+**Default**: API keys have **unlimited (infinite) rate limits** unless specific limits are set.
 
-Endpoint-specific limits:
-- Polling place queries: 100/hour
-- Plugin listing: 50/hour
-- Plugin sync: 10/hour
+When creating API keys, you can optionally set custom rate limits:
+- **rate_limit_per_day**: Maximum requests per day (e.g., 1000)
+- **rate_limit_per_hour**: Maximum requests per hour (e.g., 100)
 
-**Note**: API key management endpoints (create, list, revoke) have no rate limits.
+If no limits are specified for an API key, it will have infinite access to all endpoints.
 
-Custom rate limits can be set per API key during creation.
+**Note**: API key management endpoints (create, list, revoke) have no rate limits and are not affected by per-key settings.
 
 ## Automated Scheduling
 

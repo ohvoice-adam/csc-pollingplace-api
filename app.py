@@ -64,11 +64,43 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'admin_login'
 
-# Initialize rate limiter
+# Rate limiting helper functions
+def get_api_key_identifier():
+    """Get the API key from request for rate limiting"""
+    return request.headers.get('X-API-Key', 'anonymous')
+
+def get_api_key_limits():
+    """
+    Get dynamic rate limits for the current API key.
+    Returns None (infinite) if no limits are set on the API key.
+    """
+    # Check if we have an API key object in the request context
+    if hasattr(request, 'api_key') and request.api_key:
+        key_obj = request.api_key
+        limits = []
+
+        # Add per-day limit if set
+        if key_obj.rate_limit_per_day:
+            limits.append(f"{key_obj.rate_limit_per_day} per day")
+
+        # Add per-hour limit if set
+        if key_obj.rate_limit_per_hour:
+            limits.append(f"{key_obj.rate_limit_per_hour} per hour")
+
+        # If no limits are set, return None (infinite)
+        if not limits:
+            return None
+
+        return ";".join(limits)
+
+    # No API key in request context, no limits
+    return None
+
+# Initialize rate limiter with no default limits (infinite by default)
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    key_func=get_api_key_identifier,
+    default_limits=[],
     storage_uri="memory://"
 )
 
@@ -409,7 +441,7 @@ def revoke_api_key(key_id):
 
 @app.route('/api/polling-places', methods=['GET'])
 @require_api_key
-@limiter.limit("100 per hour")
+@limiter.limit(get_api_key_limits)
 def get_polling_places():
     """
     Get all polling places
@@ -447,7 +479,7 @@ def get_polling_places():
 
 @app.route('/api/polling-places/<location_id>', methods=['GET'])
 @require_api_key
-@limiter.limit("100 per hour")
+@limiter.limit(get_api_key_limits)
 def get_polling_place(location_id):
     """
     Get a specific polling place by ID
@@ -470,7 +502,7 @@ def get_polling_place(location_id):
 
 @app.route('/api/plugins', methods=['GET'])
 @require_api_key
-@limiter.limit("50 per hour")
+@limiter.limit(get_api_key_limits)
 def list_plugins():
     """List all loaded plugins and their status"""
     return jsonify({
@@ -480,7 +512,7 @@ def list_plugins():
 
 @app.route('/api/plugins/<plugin_name>/sync', methods=['POST'])
 @require_api_key
-@limiter.limit("10 per hour")
+@limiter.limit(get_api_key_limits)
 def sync_plugin(plugin_name):
     """Trigger a data sync for a specific plugin"""
     try:
@@ -641,7 +673,6 @@ with app.app_context():
         )
 
     # Initialize plugin manager after models are defined
-    global plugin_manager
     plugin_manager = PluginManager(app, db)
 
     # Set up automated scheduling if enabled
