@@ -257,6 +257,105 @@ class APIKey(db.Model):
         }
 
 
+class Precinct(db.Model):
+    """
+    Voting precinct model.
+    Represents a voting precinct and tracks its current polling place assignment.
+    """
+    __tablename__ = 'precincts'
+
+    # Primary identifier
+    id = db.Column(db.String(255), primary_key=True)  # e.g., "CA-ALAMEDA-0001"
+
+    # Precinct information
+    name = db.Column(db.String(255), nullable=False)
+    state = db.Column(db.String(2), nullable=False, index=True)
+    county = db.Column(db.String(100))
+    registered_voters = db.Column(db.Integer)
+
+    # Current assignment tracking
+    current_polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'))
+    last_change_date = db.Column(db.Date)
+    changed_recently = db.Column(db.Boolean, default=False)  # Changed in last 6 months
+
+    # Source tracking
+    source_plugin = db.Column(db.String(100))
+
+    # Metadata
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+    updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
+
+    # Relationships
+    current_polling_place = db.relationship('PollingPlace', foreign_keys=[current_polling_place_id], backref='current_precincts')
+    assignments = db.relationship('PrecinctAssignment', back_populates='precinct', order_by='PrecinctAssignment.assigned_date.desc()')
+
+    def to_dict(self):
+        """Convert model to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'state': self.state,
+            'county': self.county,
+            'registered_voters': self.registered_voters,
+            'current_polling_place_id': self.current_polling_place_id,
+            'last_change_date': self.last_change_date.isoformat() if self.last_change_date else None,
+            'changed_recently': self.changed_recently,
+            'source_plugin': self.source_plugin,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def to_dict_with_history(self):
+        """Convert model to dictionary with assignment history"""
+        data = self.to_dict()
+        data['assignment_history'] = [assignment.to_dict() for assignment in self.assignments]
+        if self.current_polling_place:
+            data['current_polling_place'] = self.current_polling_place.to_dict()
+        return data
+
+
+class PrecinctAssignment(db.Model):
+    """
+    Historical tracking of precinct-to-polling-place assignments.
+    Each record represents a time period when a precinct was assigned to a specific polling place.
+    """
+    __tablename__ = 'precinct_assignments'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Assignment details
+    precinct_id = db.Column(db.String(255), db.ForeignKey('precincts.id'), nullable=False, index=True)
+    polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'), nullable=False)
+
+    # Time range
+    assigned_date = db.Column(db.Date, nullable=False)
+    removed_date = db.Column(db.Date)  # NULL means current assignment
+
+    # Change tracking
+    previous_polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'))
+
+    # Metadata
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    # Relationships
+    precinct = db.relationship('Precinct', back_populates='assignments')
+    polling_place = db.relationship('PollingPlace', foreign_keys=[polling_place_id])
+    previous_polling_place = db.relationship('PollingPlace', foreign_keys=[previous_polling_place_id])
+
+    def to_dict(self):
+        """Convert model to dictionary"""
+        return {
+            'id': self.id,
+            'precinct_id': self.precinct_id,
+            'polling_place_id': self.polling_place_id,
+            'assigned_date': self.assigned_date.isoformat() if self.assigned_date else None,
+            'removed_date': self.removed_date.isoformat() if self.removed_date else None,
+            'previous_polling_place_id': self.previous_polling_place_id,
+            'is_current': self.removed_date is None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class AdminUser(UserMixin, db.Model):
     """
     Admin user model for web interface authentication
@@ -496,6 +595,87 @@ def get_polling_place(location_id):
             return jsonify(polling_place.to_vip_format()), 200
         else:
             return jsonify(polling_place.to_dict()), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+
+@app.route('/api/precincts', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_precincts():
+    """
+    Get all precincts
+    Query parameters:
+    - state: Filter by state (e.g., ?state=CA)
+    - county: Filter by county
+    - changed_recently: Filter by recent changes (true/false)
+    """
+    try:
+        query = Precinct.query
+
+        # Filter by state if provided
+        state_filter = request.args.get('state')
+        if state_filter:
+            query = query.filter_by(state=state_filter.upper())
+
+        # Filter by county if provided
+        county_filter = request.args.get('county')
+        if county_filter:
+            query = query.filter_by(county=county_filter)
+
+        # Filter by changed_recently if provided
+        changed_recently_filter = request.args.get('changed_recently')
+        if changed_recently_filter:
+            changed_recently = changed_recently_filter.lower() == 'true'
+            query = query.filter_by(changed_recently=changed_recently)
+
+        precincts = query.all()
+
+        return jsonify({
+            'count': len(precincts),
+            'precincts': [p.to_dict() for p in precincts]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/precincts/<precinct_id>', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_precinct(precinct_id):
+    """
+    Get a specific precinct by ID with assignment history
+    """
+    try:
+        precinct = Precinct.query.get_or_404(precinct_id)
+        return jsonify(precinct.to_dict_with_history()), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+
+@app.route('/api/polling-places/<location_id>/precincts', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_polling_place_precincts(location_id):
+    """
+    Get all precincts currently assigned to a polling place
+    Includes total registered voters
+    """
+    try:
+        polling_place = PollingPlace.query.get_or_404(location_id)
+
+        # Get all precincts currently assigned to this polling place
+        precincts = Precinct.query.filter_by(current_polling_place_id=location_id).all()
+
+        # Calculate total registered voters
+        total_voters = sum(p.registered_voters or 0 for p in precincts)
+
+        return jsonify({
+            'polling_place': polling_place.to_dict(),
+            'precinct_count': len(precincts),
+            'total_registered_voters': total_voters,
+            'precincts': [p.to_dict() for p in precincts]
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 

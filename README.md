@@ -10,10 +10,14 @@ Organizations that work on predicting and triaging voting issues - such as ID re
 
 This API provides a centralized platform to:
 - Aggregate polling place location data from multiple states
+- Track voting precincts and their polling place assignments
+- Monitor and flag polling place changes for precincts (with 6-month change detection)
+- Maintain complete historical records of precinct-to-polling-place assignments
+- Store registered voter counts per precinct
 - Serve data in VIP (Voting Information Project) format
 - Provide compatibility with Google Civic Data API
 - Enable state-specific data plugins for easy extensibility
-- Offer real-time access to polling place information
+- Offer real-time access to polling place and precinct information
 
 ## Technology Stack
 
@@ -192,8 +196,18 @@ This API uses a plugin system to allow state-specific data sources to be easily 
 
 1. Inherits from the `BasePlugin` class
 2. Implements a `fetch_polling_places()` method to scrape/fetch data from the state's source
-3. Returns data in VIP-compatible format
-4. Is automatically discovered and loaded by the PluginManager
+3. Optionally implements a `fetch_precincts()` method to provide precinct data and assignments
+4. Returns data in VIP-compatible format
+5. Is automatically discovered and loaded by the PluginManager
+
+### Precinct Tracking
+
+When a plugin implements `fetch_precincts()`, the API automatically:
+- Detects when a precinct's polling place assignment has changed
+- Creates a historical record of the change
+- Flags precincts that have changed within the last 6 months
+- Maintains a complete audit trail of all assignment changes
+- Tracks registered voter counts per precinct
 
 ### Creating a Plugin
 
@@ -330,6 +344,39 @@ All endpoints require authentication.
 - Headers: `X-API-Key: <your-key>`
 - Query parameters:
   - `format`: Response format - `vip` or `standard` (default: `standard`)
+- Rate limit: 100/hour
+
+### Precincts
+
+All endpoints require authentication.
+
+**GET /api/precincts**
+- Get all precincts with optional filtering
+- Headers: `X-API-Key: <your-key>`
+- Query parameters:
+  - `state`: Filter by state code (e.g., `?state=CA`)
+  - `county`: Filter by county name (e.g., `?county=Alameda`)
+  - `changed_recently`: Filter by precincts changed in last 6 months (e.g., `?changed_recently=true`)
+- Rate limit: 100/hour
+
+**GET /api/precincts/:id**
+- Get a specific precinct with full assignment history
+- Headers: `X-API-Key: <your-key>`
+- Returns:
+  - Precinct details (name, county, registered voters, etc.)
+  - Current polling place assignment with full details
+  - Complete assignment history showing all polling place changes
+  - `changed_recently` flag (true if changed within 6 months)
+- Rate limit: 100/hour
+
+**GET /api/polling-places/:id/precincts**
+- Get all precincts assigned to a specific polling place
+- Headers: `X-API-Key: <your-key>`
+- Returns:
+  - Polling place details
+  - List of all assigned precincts
+  - Total count of precincts
+  - Total registered voters across all precincts
 - Rate limit: 100/hour
 
 ### Plugins

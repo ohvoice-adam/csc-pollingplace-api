@@ -173,3 +173,50 @@ class DummyPlugin(BasePlugin):
         )
 
         return polling_places
+
+    def fetch_precincts(self) -> List[Dict[str, Any]]:
+        """
+        Generate fake precinct data for all US states.
+
+        Generates 3-8 precincts per polling place.
+        """
+        # First, we need to get the polling places from the database to assign precincts to them
+        # For the dummy plugin, we'll generate precincts based on the expected polling places
+        precincts = []
+        precinct_counter = 1
+
+        for state_code in self.STATES.keys():
+            # Generate between 5 and 15 polling places per state (matching fetch_polling_places)
+            num_polling_places = random.randint(5, 15)
+
+            # Generate county names for this state
+            counties = [
+                f"{random.choice(self.CITY_PREFIXES)} County",
+                f"{random.choice(['Lake', 'River', 'Mountain'])} County",
+                f"{random.choice(['North', 'South', 'East', 'West'])} County"
+            ]
+
+            for polling_place_num in range(1, num_polling_places + 1):
+                polling_place_id = f"{state_code}-{polling_place_num:05d}"
+
+                # Generate 3-8 precincts per polling place
+                num_precincts = random.randint(3, 8)
+
+                for precinct_num in range(1, num_precincts + 1):
+                    precinct_data = {
+                        'id': f"{state_code}-P-{precinct_counter:06d}",
+                        'name': f"Precinct {precinct_num}",
+                        'state': state_code,
+                        'county': random.choice(counties),
+                        'registered_voters': random.randint(500, 5000),
+                        'polling_place_id': polling_place_id
+                    }
+
+                    precincts.append(precinct_data)
+                    precinct_counter += 1
+
+        self.app.logger.info(
+            f"Generated {len(precincts)} fake precincts across {len(self.STATES)} states"
+        )
+
+        return precincts
