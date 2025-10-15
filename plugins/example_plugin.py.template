@@ -1,0 +1,113 @@
+"""
+Example Plugin Template
+
+Copy this file and rename it to your state name (e.g., california.py, texas.py)
+Then implement the fetch_polling_places() method with your state-specific logic.
+"""
+
+from typing import List, Dict, Any
+from plugins.base_plugin import BasePlugin
+import requests
+
+
+class ExamplePlugin(BasePlugin):
+    """
+    Example plugin demonstrating how to implement a state-specific scraper.
+    """
+
+    @property
+    def name(self) -> str:
+        """
+        Plugin name - MUST match the filename (without .py extension)
+        """
+        return 'example'
+
+    @property
+    def state_code(self) -> str:
+        """
+        Two-letter state code
+        """
+        return 'EX'
+
+    @property
+    def description(self) -> str:
+        """
+        Human-readable description
+        """
+        return 'Example plugin demonstrating the plugin architecture'
+
+    def fetch_polling_places(self) -> List[Dict[str, Any]]:
+        """
+        Fetch and parse polling place data from the state's data source.
+
+        This is where you implement your state-specific scraping/fetching logic.
+        """
+        polling_places = []
+
+        # Example 1: Fetching from a JSON API
+        try:
+            response = requests.get('https://example.state.gov/api/polling-places')
+            response.raise_for_status()
+            data = response.json()
+
+            for location in data.get('locations', []):
+                # Transform the data to match VIP format
+                polling_place = {
+                    'id': f"{self.state_code}-{location['id']}",
+                    'name': location['name'],
+                    'address_line1': location['address'],
+                    'city': location['city'],
+                    'state': self.state_code,
+                    'zip_code': location['zip'],
+                    'latitude': location.get('lat'),
+                    'longitude': location.get('lng'),
+                    'polling_hours': location.get('hours', '7:00 AM - 8:00 PM'),
+                }
+
+                # Validate before adding
+                if self.validate_polling_place_data(polling_place):
+                    polling_places.append(polling_place)
+
+        except Exception as e:
+            self.app.logger.error(f"Error fetching from API: {e}")
+            raise
+
+        # Example 2: Parsing a CSV file (if applicable)
+        # import csv
+        # with open('data.csv', 'r') as f:
+        #     reader = csv.DictReader(f)
+        #     for row in reader:
+        #         polling_place = {
+        #             'id': f"{self.state_code}-{row['id']}",
+        #             'name': row['location_name'],
+        #             ...
+        #         }
+        #         polling_places.append(polling_place)
+
+        # Example 3: Scraping HTML (if necessary)
+        # from bs4 import BeautifulSoup
+        # response = requests.get('https://example.state.gov/polling-places')
+        # soup = BeautifulSoup(response.content, 'html.parser')
+        # for location_div in soup.find_all('div', class_='polling-location'):
+        #     polling_place = {
+        #         'id': location_div.get('data-id'),
+        #         'name': location_div.find('h2').text,
+        #         ...
+        #     }
+        #     polling_places.append(polling_place)
+
+        self.app.logger.info(
+            f"Fetched {len(polling_places)} polling places for {self.state_code}"
+        )
+
+        return polling_places
+
+
+# Additional helper methods can be added as needed
+def geocode_address(address: str) -> tuple:
+    """
+    Example helper method to geocode an address.
+    You might use a service like Google Maps API, OpenStreetMap, etc.
+    """
+    # Implementation here
+    return (0.0, 0.0)  # latitude, longitude
