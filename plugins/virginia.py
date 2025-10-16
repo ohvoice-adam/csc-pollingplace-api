@@ -10,6 +10,7 @@ import requests
 import pandas as pd
 from typing import List, Dict, Any
 from io import BytesIO
+from datetime import datetime
 from plugins.base_plugin import BasePlugin
 
 
@@ -194,46 +195,55 @@ class VirginiaPlugin(BasePlugin):
 
         self.app.logger.info(f"Starting historical import for {len(sorted_elections)} elections")
 
-        for election_date, url in sorted_elections:
-            self.app.logger.info(f"Importing election: {election_date}")
+        for election_date_str, url in sorted_elections:
+            self.app.logger.info(f"Importing election: {election_date_str}")
 
             try:
+                # Parse election date
+                election_date = datetime.strptime(election_date_str, '%Y-%m-%d').date()
+
                 # Download and parse this election's data
                 df = self._download_excel(url)
                 polling_places, precincts = self._parse_excel_data(df)
 
-                # Use the parent sync() method but temporarily override fetch methods
+                # Override fetch methods to return this election's data
                 old_fetch_pp = self.fetch_polling_places
                 old_fetch_pr = self.fetch_precincts
 
-                # Override to return this election's data
                 self.fetch_polling_places = lambda: polling_places
-                self.fetch_precincts = lambda: precincts
+                # Don't fetch precincts during sync() - we'll do that separately with the correct date
+                self.fetch_precincts = lambda: []
 
-                # Run sync for this election
+                # Sync polling places
                 sync_result = self.sync()
 
-                # Restore original methods
+                # Restore fetch methods
                 self.fetch_polling_places = old_fetch_pp
                 self.fetch_precincts = old_fetch_pr
 
-                results[election_date] = {
+                # Now sync precincts separately with the actual election date (not today)
+                # This ensures last_change_date reflects the actual election date
+                self.fetch_precincts = lambda: precincts
+                precinct_result = self.sync_precincts(effective_date=election_date)
+                self.fetch_precincts = old_fetch_pr
+
+                results[election_date_str] = {
                     'success': sync_result['success'],
                     'polling_places': sync_result['polling_places'],
-                    'precincts': sync_result['precincts']
+                    'precincts': precinct_result
                 }
 
                 self.app.logger.info(
-                    f"Election {election_date}: "
+                    f"Election {election_date_str}: "
                     f"PP added={sync_result['polling_places']['added']}, "
                     f"PP updated={sync_result['polling_places']['updated']}, "
-                    f"Precincts added={sync_result['precincts']['added']}, "
-                    f"Precincts updated={sync_result['precincts']['updated']}"
+                    f"Precincts added={precinct_result['added']}, "
+                    f"Precincts updated={precinct_result['updated']}"
                 )
 
             except Exception as e:
-                self.app.logger.error(f"Error importing election {election_date}: {e}")
-                results[election_date] = {
+                self.app.logger.error(f"Error importing election {election_date_str}: {e}")
+                results[election_date_str] = {
                     'success': False,
                     'error': str(e)
                 }

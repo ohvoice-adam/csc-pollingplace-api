@@ -205,11 +205,15 @@ class BasePlugin(ABC):
                     'timestamp': datetime.utcnow().isoformat()
                 }
 
-    def sync_precincts(self) -> Dict[str, int]:
+    def sync_precincts(self, effective_date: date = None) -> Dict[str, int]:
         """
         Sync precinct data from the source to the database.
 
         This method tracks assignment changes and maintains historical records.
+
+        Args:
+            effective_date: Date to use for assignments (default: today).
+                            Used during historical imports to set accurate dates.
 
         Returns:
             Dictionary with sync results:
@@ -230,7 +234,9 @@ class BasePlugin(ABC):
             added = 0
             updated = 0
             errors = 0
-            today = date.today()
+            # Use effective_date for historical imports, otherwise use today
+            sync_date = effective_date if effective_date else date.today()
+            today = date.today()  # For calculating changed_recently
             six_months_ago = today - timedelta(days=180)
 
             for data in precincts_data:
@@ -256,20 +262,20 @@ class BasePlugin(ABC):
                             ).first()
 
                             if current_assignment:
-                                current_assignment.removed_date = today
+                                current_assignment.removed_date = sync_date
 
                             # Create new assignment record
                             new_assignment = PrecinctAssignment(
                                 precinct_id=precinct_id,
                                 polling_place_id=polling_place_id,
-                                assigned_date=today,
+                                assigned_date=sync_date,
                                 previous_polling_place_id=existing.current_polling_place_id
                             )
                             self.db.session.add(new_assignment)
 
                             # Update precinct with new assignment
                             existing.current_polling_place_id = polling_place_id
-                            existing.last_change_date = today
+                            existing.last_change_date = sync_date
                             # Note: changed_recently will be set below based on last_change_date
 
                         # Update other fields (regardless of whether assignment changed)
@@ -299,7 +305,7 @@ class BasePlugin(ABC):
                             county=data.get('county'),
                             registered_voters=data.get('registered_voters'),
                             current_polling_place_id=polling_place_id,
-                            last_change_date=today,
+                            last_change_date=sync_date,
                             changed_recently=False,  # New precincts aren't considered "changed"
                             source_plugin=self.name
                         )
@@ -309,7 +315,7 @@ class BasePlugin(ABC):
                         initial_assignment = PrecinctAssignment(
                             precinct_id=precinct_id,
                             polling_place_id=polling_place_id,
-                            assigned_date=today,
+                            assigned_date=sync_date,
                             previous_polling_place_id=None
                         )
                         self.db.session.add(initial_assignment)
