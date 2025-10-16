@@ -267,12 +267,12 @@ class BasePlugin(ABC):
                             )
                             self.db.session.add(new_assignment)
 
-                            # Update precinct
+                            # Update precinct with new assignment
                             existing.current_polling_place_id = polling_place_id
                             existing.last_change_date = today
-                            existing.changed_recently = (today >= six_months_ago)
+                            # Note: changed_recently will be set below based on last_change_date
 
-                        # Update other fields
+                        # Update other fields (regardless of whether assignment changed)
                         if 'name' in data:
                             existing.name = data['name']
                         if 'county' in data:
@@ -284,7 +284,8 @@ class BasePlugin(ABC):
 
                         existing.source_plugin = self.name
 
-                        # Check if changed_recently flag needs updating based on last_change_date
+                        # Update changed_recently flag based on last_change_date
+                        # This ensures it's only True if the assignment actually changed within 6 months
                         if existing.last_change_date:
                             existing.changed_recently = (existing.last_change_date >= six_months_ago)
 
