@@ -21,6 +21,8 @@ class VirginiaPlugin(BasePlugin):
 
     # Election data URLs (most recent first)
     ELECTIONS = {
+        '2025-11-04': 'https://www.elections.virginia.gov/media/registration-statistics/2025-November-General-Election-Day-Polling-Locations-20250912.xlsx',
+        '2025-06-10': 'https://www.elections.virginia.gov/media/registration-statistics/2025-June-Democratic-Primary-Election-Day-Polling-Locations-(5-28-25).xlsx',
         '2024-11-05': 'https://www.elections.virginia.gov/media/registration-statistics/2024-November-General-Election-Day-Polling-Locations-(10-9-24).xlsx',
         '2024-06-18': 'https://www.elections.virginia.gov/media/registration-statistics/2024-June-Democratic-and-Republican-Primary-Polling-Locations-(6-5-24).xlsx',
         '2024-03-05': 'https://www.elections.virginia.gov/media/registration-statistics/2024-March-Presidential-Primary-Polling-Locations-(2-27-24).xlsx',
