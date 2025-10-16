@@ -24,3 +24,7 @@ python-dotenv==1.0.0
 
 # Utilities
 requests==2.31.0
+
+# Data processing (for plugin Excel parsing)
+pandas==2.2.0
+openpyxl==3.1.2

@@ -702,6 +702,38 @@ def sync_plugin(plugin_name):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/plugins/<plugin_name>/import-historical', methods=['POST'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def import_historical_plugin_data(plugin_name):
+    """
+    Trigger a historical data import for a specific plugin.
+    This imports data from all available elections in chronological order
+    to build up a complete assignment history.
+    """
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+
+        # Check if plugin has import_historical_data method
+        if not hasattr(plugin, 'import_historical_data'):
+            return jsonify({
+                'error': f'Plugin "{plugin_name}" does not support historical imports'
+            }), 400
+
+        # Run historical import
+        result = plugin.import_historical_data()
+
+        return jsonify({
+            'success': True,
+            'message': f'Historical import completed for {plugin_name}',
+            'results': result
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # Admin Web Interface Routes
 @app.route('/admin')
 @app.route('/admin/')

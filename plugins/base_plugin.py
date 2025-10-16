@@ -250,7 +250,7 @@ class BasePlugin(ABC):
                         # Check if polling place assignment has changed
                         if existing.current_polling_place_id != polling_place_id:
                             # Mark the old assignment as ended
-                            current_assignment = PrecinctAssignment.query.filter_by(
+                            current_assignment = self.db.session.query(PrecinctAssignment).filter_by(
                                 precinct_id=precinct_id,
                                 removed_date=None
                             ).first()
