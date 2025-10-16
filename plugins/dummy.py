@@ -153,13 +153,13 @@ class DummyPlugin(BasePlugin):
         """
         Generate fake polling place data for all US states.
 
-        Generates at least 1000 polling places per state.
+        Generates 100-120 polling places per state.
         """
         polling_places = []
 
         for state_code in self.STATES.keys():
-            # Generate between 1000 and 1200 locations per state
-            num_locations = random.randint(1000, 1200)
+            # Generate between 100 and 120 locations per state
+            num_locations = random.randint(100, 120)
 
             for i in range(num_locations):
                 location = self.generate_fake_location(state_code, i + 1)
@@ -192,8 +192,8 @@ class DummyPlugin(BasePlugin):
         precinct_counter = 1
 
         for state_code in self.STATES.keys():
-            # Generate between 1000 and 1200 polling places per state (matching fetch_polling_places)
-            num_polling_places = random.randint(1000, 1200)
+            # Generate between 100 and 120 polling places per state (matching fetch_polling_places)
+            num_polling_places = random.randint(100, 120)
 
             # Generate county names for this state
             counties = [
