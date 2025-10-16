@@ -543,18 +543,39 @@ def revoke_api_key(key_id):
 @limiter.limit(get_api_key_limits)
 def get_polling_places():
     """
-    Get all polling places
-    Query parameters:
-    - state: Filter by state (e.g., ?state=CA)
+    Get polling places for a specific state
+    Query parameters (REQUIRED):
+    - state: State code (e.g., ?state=VA)
+    Optional parameters:
+    - dataset: Data source - 'dummy' for test data (default: real plugin data)
     - format: Response format - 'vip' or 'standard' (default: standard)
     """
     try:
-        query = PollingPlace.query
-
-        # Filter by state if provided
+        # State parameter is now required
         state_filter = request.args.get('state')
-        if state_filter:
-            query = query.filter_by(state=state_filter.upper())
+        if not state_filter:
+            return jsonify({
+                'error': 'State parameter is required. Use ?state=VA (or other state code). Add dataset=dummy for test data.'
+            }), 400
+
+        state_filter = state_filter.upper()
+
+        # Check if user wants dummy data
+        dataset = request.args.get('dataset', '').lower()
+
+        if dataset == 'dummy':
+            # Query dummy data for this state
+            query = PollingPlace.query.filter_by(state=state_filter, source_plugin='dummy')
+        else:
+            # Query real plugin data for this state
+            plugin = plugin_manager.get_plugin_by_state(state_filter)
+            if not plugin:
+                return jsonify({
+                    'error': f'No data plugin available for state "{state_filter}". Available states: {", ".join([p["state_code"] for p in plugin_manager.list_plugins() if p["state_code"] != "ALL"])}. Add dataset=dummy for test data.'
+                }), 404
+
+            # Query by both state AND source_plugin to avoid mixing with dummy data
+            query = PollingPlace.query.filter_by(state=state_filter, source_plugin=plugin.name)
 
         polling_places = query.all()
 
@@ -604,19 +625,40 @@ def get_polling_place(location_id):
 @limiter.limit(get_api_key_limits)
 def get_precincts():
     """
-    Get all precincts
-    Query parameters:
-    - state: Filter by state (e.g., ?state=CA)
+    Get precincts for a specific state
+    Query parameters (REQUIRED):
+    - state: State code (e.g., ?state=VA)
+    Optional parameters:
+    - dataset: Data source - 'dummy' for test data (default: real plugin data)
     - county: Filter by county
     - changed_recently: Filter by recent changes (true/false)
     """
     try:
-        query = Precinct.query
-
-        # Filter by state if provided
+        # State parameter is now required
         state_filter = request.args.get('state')
-        if state_filter:
-            query = query.filter_by(state=state_filter.upper())
+        if not state_filter:
+            return jsonify({
+                'error': 'State parameter is required. Use ?state=VA (or other state code). Add dataset=dummy for test data.'
+            }), 400
+
+        state_filter = state_filter.upper()
+
+        # Check if user wants dummy data
+        dataset = request.args.get('dataset', '').lower()
+
+        if dataset == 'dummy':
+            # Query dummy data for this state
+            query = Precinct.query.filter_by(state=state_filter, source_plugin='dummy')
+        else:
+            # Query real plugin data for this state
+            plugin = plugin_manager.get_plugin_by_state(state_filter)
+            if not plugin:
+                return jsonify({
+                    'error': f'No data plugin available for state "{state_filter}". Available states: {", ".join([p["state_code"] for p in plugin_manager.list_plugins() if p["state_code"] != "ALL"])}. Add dataset=dummy for test data.'
+                }), 404
+
+            # Query by both state AND source_plugin to avoid mixing with dummy data
+            query = Precinct.query.filter_by(state=state_filter, source_plugin=plugin.name)
 
         # Filter by county if provided
         county_filter = request.args.get('county')
