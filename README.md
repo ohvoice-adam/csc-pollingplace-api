@@ -85,24 +85,49 @@ The API will be available at `http://localhost:8080`
 - **IMPORTANT**: Change the default password immediately at `/admin/change-password`
 - Create API keys through the web interface
 
-## Deployment to Google Cloud Run
+## Deployment Guide
 
 ### Prerequisites
 
-- Google Cloud SDK installed
-- Google Cloud project created
-- Docker installed
+- Python 3.11+
+- Docker (for containerized deployment)
+- Google Cloud SDK (for Cloud Run deployment)
+- Google Cloud project (for Cloud Run)
 
-### Deploy
+### Local Development Deployment
 
-1. Build the container:
-```bash
-gcloud builds submit --tag gcr.io/PROJECT-ID/csc-pollingplace-api
-```
+1. **Setup Environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-2. Deploy to Cloud Run:
+2. **Run with SQLite:**
+   ```bash
+   mkdir -p data
+   python app.py
+   ```
+   Access at `http://localhost:8080`
 
-   a. With SQLite and volume for persistent storage:
+3. **Run with Docker:**
+   ```bash
+   docker build -t csc-pollingplace-api .
+   docker run -d -p 8080:8080 \
+     -v $(pwd)/data:/data \
+     -e DB_TYPE=sqlite \
+     -e MASTER_API_KEY=your-secure-key \
+     -e AUTO_SYNC_ENABLED=True \
+     csc-pollingplace-api
+   ```
+
+### Google Cloud Run Deployment
+
+1. **Build and Push Container:**
+   ```bash
+   gcloud builds submit --tag gcr.io/PROJECT-ID/csc-pollingplace-api
+   ```
+
+2. **Deploy with SQLite:**
    ```bash
    gcloud run deploy csc-pollingplace-api \
      --image gcr.io/PROJECT-ID/csc-pollingplace-api \
@@ -113,23 +138,49 @@ gcloud builds submit --tag gcr.io/PROJECT-ID/csc-pollingplace-api
      --execution-environment gen2
    ```
 
-   b. With Cloud SQL (recommended for production):
+3. **Deploy with Cloud SQL (Recommended for Production):**
    ```bash
+   # First, create a Cloud SQL instance and database
+   gcloud sql instances create pollingplace-db --tier=db-f1-micro --region=us-central1
+   gcloud sql databases create pollingplaces --instance=pollingplace-db
+   gcloud sql users set-password postgres --host=% --instance=pollingplace-db --password=your-password
+
+   # Then deploy
    gcloud run deploy csc-pollingplace-api \
      --image gcr.io/PROJECT-ID/csc-pollingplace-api \
      --platform managed \
      --region us-central1 \
      --allow-unauthenticated \
-     --set-env-vars DB_TYPE=postgresql,DB_USER=postgres,DB_PASSWORD=your-password,DB_NAME=pollingplaces,DB_HOST=/cloudsql/PROJECT-ID:REGION:INSTANCE-NAME,DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
-     --add-cloudsql-instances PROJECT-ID:REGION:INSTANCE-NAME \
+     --set-env-vars DB_TYPE=postgresql,DB_USER=postgres,DB_PASSWORD=your-password,DB_NAME=pollingplaces,DB_HOST=/cloudsql/PROJECT-ID:us-central1:pollingplace-db,DEFAULT_ADMIN_PASSWORD=your-secure-password,AUTO_SYNC_ENABLED=True \
+     --add-cloudsql-instances PROJECT-ID:us-central1:pollingplace-db \
      --execution-environment gen2
    ```
 
-3. After deployment, access the admin interface:
-- Navigate to `https://your-cloud-run-url/admin`
-- Login with username `admin` and the password you set
-- Change the default password immediately
-- Create API keys for your applications
+4. **Post-Deployment Steps:**
+   - Access the admin interface at `https://your-cloud-run-url/admin`
+   - Login with username `admin` and the password you set
+   - Immediately change the default password at `/admin/change-password`
+   - Create API keys through the web interface
+   - Test the API: `curl https://your-cloud-run-url/api/polling-places?state=CA&dataset=dummy`
+
+### Environment Variables
+
+Required environment variables:
+- `DB_TYPE`: `sqlite` or `postgresql`
+- `MASTER_API_KEY`: Secure key for creating API keys
+- `DEFAULT_ADMIN_PASSWORD`: Admin interface password (change immediately)
+- `AUTO_SYNC_ENABLED`: `True` to enable automated plugin syncing
+- `SYNC_INTERVAL_HOURS`: Hours between syncs (default: 24)
+
+For PostgreSQL/Cloud SQL:
+- `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`, `DB_PORT`
+
+### Monitoring and Maintenance
+
+- Monitor application logs in Cloud Run console
+- Set up alerts for sync failures
+- Regularly update dependencies: `pip install -u -r requirements.txt`
+- Backup database regularly (especially for SQLite)
 
 ### Database Configuration
 
@@ -310,6 +361,8 @@ When enabled, all state plugins will automatically sync on the specified interva
 
 ### Authentication & API Keys
 
+All API endpoints (except health checks and admin interface) require authentication via API key provided in the `X-API-Key` header.
+
 **POST /api/keys**
 - Create a new API key (requires master API key)
 - Headers: `X-API-Key: <master-key>`
@@ -332,12 +385,14 @@ When enabled, all state plugins will automatically sync on the specified interva
 All endpoints require authentication.
 
 **GET /api/polling-places**
-- Get all polling places
+- Get polling places for a specific state
 - Headers: `X-API-Key: <your-key>`
 - Query parameters:
-  - `state`: Filter by state code (e.g., `?state=CA`)
+  - `state` (required): Filter by state code (e.g., `?state=CA`)
   - `format`: Response format - `vip` or `standard` (default: `standard`)
+  - `dataset`: Data source - `dummy` for test data (default: real plugin data)
 - Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/polling-places?state=CA&format=vip"`
 
 **GET /api/polling-places/:id**
 - Get a specific polling place by ID
@@ -345,19 +400,22 @@ All endpoints require authentication.
 - Query parameters:
   - `format`: Response format - `vip` or `standard` (default: `standard`)
 - Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/polling-places/CA-12345"`
 
 ### Precincts
 
 All endpoints require authentication.
 
 **GET /api/precincts**
-- Get all precincts with optional filtering
+- Get precincts for a specific state with optional filtering
 - Headers: `X-API-Key: <your-key>`
 - Query parameters:
-  - `state`: Filter by state code (e.g., `?state=CA`)
+  - `state` (required): Filter by state code (e.g., `?state=CA`)
   - `county`: Filter by county name (e.g., `?county=Alameda`)
   - `changed_recently`: Filter by precincts changed in last 6 months (e.g., `?changed_recently=true`)
+  - `dataset`: Data source - `dummy` for test data (default: real plugin data)
 - Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/precincts?state=CA&changed_recently=true"`
 
 **GET /api/precincts/:id**
 - Get a specific precinct with full assignment history
@@ -368,6 +426,7 @@ All endpoints require authentication.
   - Complete assignment history showing all polling place changes
   - `changed_recently` flag (true if changed within 6 months)
 - Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/precincts/CA-ALAMEDA-0001"`
 
 **GET /api/polling-places/:id/precincts**
 - Get all precincts assigned to a specific polling place
@@ -378,6 +437,7 @@ All endpoints require authentication.
   - Total count of precincts
   - Total registered voters across all precincts
 - Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/polling-places/CA-12345/precincts"`
 
 ### Plugins
 
@@ -387,12 +447,46 @@ All endpoints require authentication.
 - List all loaded plugins and their status
 - Headers: `X-API-Key: <your-key>`
 - Rate limit: 50/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/plugins"`
 
 **POST /api/plugins/:name/sync**
 - Trigger a data sync for a specific plugin
 - Headers: `X-API-Key: <your-key>`
-- Example: `POST /api/plugins/california/sync`
 - Rate limit: 10/hour
+- Example: `curl -X POST -H "X-API-Key: your-key" "http://localhost:8080/api/plugins/california/sync"`
+
+**POST /api/plugins/:name/import-historical**
+- Trigger historical data import for a plugin (if supported)
+- Headers: `X-API-Key: <your-key>`
+- Rate limit: 10/hour
+- Example: `curl -X POST -H "X-API-Key: your-key" "http://localhost:8080/api/plugins/california/import-historical"`
+
+### Elections
+
+All endpoints require authentication.
+
+**GET /api/elections**
+- Get list of elections with optional filtering
+- Headers: `X-API-Key: <your-key>`
+- Query parameters:
+  - `state`: Filter by state code (e.g., `?state=CA`)
+  - `year`: Filter by year (e.g., `?year=2024`)
+- Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/elections?year=2024"`
+
+**GET /api/elections/:id**
+- Get a specific election with statistics
+- Headers: `X-API-Key: <your-key>`
+- Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/elections/1"`
+
+**GET /api/elections/:id/precincts**
+- Get precincts as assigned in a specific election
+- Headers: `X-API-Key: <your-key>`
+- Query parameters:
+  - `county`: Filter by county
+- Rate limit: 100/hour
+- Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/elections/1/precincts"`
 
 ### VIP Format Example
 
@@ -420,6 +514,23 @@ When requesting data with `?format=vip`, the response follows the Voting Informa
 }
 ```
 
+### Error Responses
+
+All endpoints return standard HTTP status codes and JSON error messages:
+
+- `400 Bad Request`: Invalid request parameters
+- `401 Unauthorized`: Missing or invalid API key
+- `404 Not Found`: Resource not found
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server error
+
+Example error response:
+```json
+{
+  "error": "State parameter is required. Use ?state=VA (or other state code). Add dataset=dummy for test data."
+}
+```
+
 ## Data Sources
 
 State-specific plugins can pull data from various sources:
@@ -429,6 +540,55 @@ State-specific plugins can pull data from various sources:
 - Official CSV/Excel files
 - Third-party election data providers
 
+### Supported States
+
+Currently implemented plugins:
+- **Dummy Plugin**: Generates test data for all 50 US states
+- **Virginia Plugin**: Scrapes data from Virginia Department of Elections
+- **BigQuery Plugin**: Queries voter data from Google BigQuery (configurable for any state)
+
+To add support for a new state, create a plugin following the guide in `plugins/README.md`.
+
+## Troubleshooting
+
+### Common Issues
+
+**Application won't start:**
+- Ensure all dependencies are installed: `pip install -r requirements.txt`
+- Check that environment variables are set (see `.env.example`)
+- Verify database path exists and is writable for SQLite
+
+**API key authentication fails:**
+- Confirm API key is active and provided in `X-API-Key` header
+- Check admin interface for key status
+- Ensure key has not exceeded rate limits
+
+**Plugin not loading:**
+- Verify plugin file name matches the `name` property
+- Check application logs for import errors
+- Ensure plugin inherits from `BasePlugin`
+
+**Sync failing:**
+- Review application logs for specific errors
+- Confirm data source is accessible
+- Validate data format in plugin's `fetch_polling_places()` method
+
+**Database connection issues:**
+- For SQLite: Ensure `/data` directory exists and is writable
+- For PostgreSQL: Verify connection string and credentials
+- Check health endpoint: `GET /health`
+
+**Rate limiting errors:**
+- Check your API key's rate limits in the admin interface
+- Wait before retrying or request higher limits
+
+### Logs and Debugging
+
+- Application logs are written to stdout/stderr
+- Enable debug mode: Set `DEBUG=True` in environment variables
+- Check database logs for SQL errors
+- Use the health endpoint to verify database connectivity
+
 ## Contributing
 
 Contributions are welcome! Please feel free to:
@@ -437,7 +597,20 @@ Contributions are welcome! Please feel free to:
 - Enhance documentation
 - Report issues
 
-Please submit a Pull Request with your changes.
+### Development Setup
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Run tests (if applicable)
+5. Submit a Pull Request with a clear description
+
+### Code Style
+
+- Follow PEP 8 for Python code
+- Use type hints where appropriate
+- Add docstrings to new functions and classes
+- Ensure all new code is covered by tests
 
 ## License
 

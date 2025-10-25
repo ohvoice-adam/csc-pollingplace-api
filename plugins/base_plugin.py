@@ -5,8 +5,11 @@ All state plugins should inherit from this class and implement the required meth
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime, date, timedelta
+
+if TYPE_CHECKING:
+    from app import PollingPlace, Precinct, PrecinctAssignment
 
 
 class BasePlugin(ABC):
@@ -109,11 +112,112 @@ class BasePlugin(ABC):
         """
         return []
 
+    def normalize_text(self, text: str) -> str:
+        """
+        Normalize text for matching by standardizing abbreviations and formatting.
+
+        Args:
+            text: The text to normalize
+
+        Returns:
+            Normalized text string
+        """
+        if not text:
+            return ""
+
+        # Common abbreviation mappings
+        abbreviations = {
+            'office': 'ofc',
+            'ofc': 'ofc',
+            'building': 'bldg',
+            'bldg': 'bldg',
+            'street': 'st',
+            'st': 'st',
+            'avenue': 'ave',
+            'ave': 'ave',
+            'road': 'rd',
+            'rd': 'rd',
+            'drive': 'dr',
+            'dr': 'dr',
+            'lane': 'ln',
+            'ln': 'ln',
+            'boulevard': 'blvd',
+            'blvd': 'blvd',
+            'place': 'pl',
+            'pl': 'pl',
+            'court': 'ct',
+            'ct': 'ct',
+            'center': 'ctr',
+            'ctr': 'ctr',
+            'school': 'sch',
+            'sch': 'sch',
+            'library': 'lib',
+            'lib': 'lib',
+            'community': 'comm',
+            'comm': 'comm',
+            'hall': 'hl',
+            'hl': 'hl',
+            'park': 'pk',
+            'pk': 'pk',
+            'elementary': 'elem',
+            'elem': 'elem',
+            'middle': 'mid',
+            'mid': 'mid',
+            'high': 'hi',
+            'hi': 'hi',
+            'north': 'n',
+            'n': 'n',
+            'south': 's',
+            's': 's',
+            'east': 'e',
+            'e': 'e',
+            'west': 'w',
+            'w': 'w'
+        }
+
+        # Convert to lowercase, remove extra spaces, and replace abbreviations
+        normalized = text.lower().strip()
+        for full, abbr in abbreviations.items():
+            normalized = normalized.replace(full, abbr)
+
+        # Remove punctuation and extra spaces
+        import re
+        normalized = re.sub(r'[^\w\s]', '', normalized)
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        return normalized
+
+    def generate_composite_key(self, name: str, address_line1: str, city: str, state: str, zip_code: str) -> str:
+        """
+        Generate a composite key from normalized name and address components.
+
+        Args:
+            name: Polling place name
+            address_line1: Street address
+            city: City name
+            state: State code
+            zip_code: ZIP code
+
+        Returns:
+            Composite key string
+        """
+        normalized_name = self.normalize_text(name)
+        normalized_address = self.normalize_text(address_line1)
+        normalized_city = self.normalize_text(city)
+
+        # Create a hash-based key for uniqueness
+        import hashlib
+        key_string = f"{normalized_name}|{normalized_address}|{normalized_city}|{state}|{zip_code}"
+        return hashlib.md5(key_string.encode()).hexdigest()
+
+
+
     def sync(self) -> Dict[str, Any]:
         """
         Sync polling place data from the source to the database.
 
-        This method calls fetch_polling_places() and updates the database.
+        This method calls fetch_polling_places() and updates the database using
+        name and address matching instead of relying on IDs.
 
         Returns:
             Dictionary with sync results:
@@ -143,6 +247,16 @@ class BasePlugin(ABC):
                         # Add source tracking
                         data['source_state'] = self.state_code
                         data['source_plugin'] = self.name
+
+                        # Generate composite key as ID if not provided
+                        if 'id' not in data or not data['id']:
+                            data['id'] = self.generate_composite_key(
+                                data.get('name', ''),
+                                data.get('address_line1', ''),
+                                data.get('city', ''),
+                                data.get('state', ''),
+                                data.get('zip_code', '')
+                            )
 
                         # Check if record exists
                         existing = self.db.session.get(PollingPlace, data['id'])
@@ -176,7 +290,7 @@ class BasePlugin(ABC):
 
                 result = {
                     'success': True,
-                    'message': f'Successfully synced data for {self.state_code}',
+                    'message': f'Successfully synced data for {self.state_code} using name/address matching',
                     'polling_places': {
                         'added': added,
                         'updated': updated,
@@ -205,15 +319,40 @@ class BasePlugin(ABC):
                     'timestamp': datetime.utcnow().isoformat()
                 }
 
-    def sync_precincts(self, effective_date: date = None) -> Dict[str, int]:
+                self.app.logger.info(f"Sync completed for {self.name}: {result}")
+                return result
+
+            except Exception as e:
+                self.error_count += 1
+                error_msg = f"Error syncing {self.name}: {str(e)}"
+                self.app.logger.error(error_msg)
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'polling_places': {
+                        'added': 0,
+                        'updated': 0,
+                        'errors': 1
+                    },
+                    'precincts': {'added': 0, 'updated': 0, 'errors': 0},
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+
+
+
+
+
+    def sync_precincts(self, effective_date: date = None, election_id: int = None) -> Dict[str, int]:
         """
         Sync precinct data from the source to the database.
 
-        This method tracks assignment changes and maintains historical records.
+        This method tracks assignment changes and maintains historical records,
+        using name and address matching for polling places.
 
         Args:
             effective_date: Date to use for assignments (default: today).
-                            Used during historical imports to set accurate dates.
+                             Used during historical imports to set accurate dates.
+            election_id: Optional election ID to link assignments to.
 
         Returns:
             Dictionary with sync results:
@@ -223,7 +362,7 @@ class BasePlugin(ABC):
         """
         try:
             # Import here to avoid circular imports
-            from app import Precinct, PrecinctAssignment
+            from app import Precinct, PrecinctAssignment, PollingPlace
 
             # Fetch precinct data from source
             precincts_data = self.fetch_precincts()
@@ -244,8 +383,15 @@ class BasePlugin(ABC):
                     precinct_id = data.get('id')
                     polling_place_id = data.get('polling_place_id')
 
-                    if not precinct_id or not polling_place_id:
-                        self.app.logger.warning(f"Skipping precinct with missing id or polling_place_id")
+                    if not precinct_id:
+                        self.app.logger.warning(f"Skipping precinct with missing id")
+                        errors += 1
+                        continue
+
+
+
+                    if not polling_place_id:
+                        self.app.logger.warning(f"Skipping precinct with missing polling_place_id")
                         errors += 1
                         continue
 
@@ -269,7 +415,8 @@ class BasePlugin(ABC):
                                 precinct_id=precinct_id,
                                 polling_place_id=polling_place_id,
                                 assigned_date=sync_date,
-                                previous_polling_place_id=existing.current_polling_place_id
+                                previous_polling_place_id=existing.current_polling_place_id,
+                                election_id=election_id
                             )
                             self.db.session.add(new_assignment)
 
@@ -306,7 +453,7 @@ class BasePlugin(ABC):
                             registered_voters=data.get('registered_voters'),
                             current_polling_place_id=polling_place_id,
                             last_change_date=sync_date,
-                            changed_recently=False,  # New precincts aren't considered "changed"
+                            changed_recently=False,
                             source_plugin=self.name
                         )
                         self.db.session.add(new_precinct)
@@ -316,7 +463,8 @@ class BasePlugin(ABC):
                             precinct_id=precinct_id,
                             polling_place_id=polling_place_id,
                             assigned_date=sync_date,
-                            previous_polling_place_id=None
+                            previous_polling_place_id=None,
+                            election_id=election_id
                         )
                         self.db.session.add(initial_assignment)
 
@@ -334,6 +482,8 @@ class BasePlugin(ABC):
         except Exception as e:
             self.app.logger.error(f"Error syncing precincts for {self.name}: {str(e)}")
             return {'added': 0, 'updated': 0, 'errors': 1}
+
+
 
     def get_status(self) -> Dict[str, Any]:
         """
