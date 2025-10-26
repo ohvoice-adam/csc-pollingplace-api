@@ -210,14 +210,39 @@ class BasePlugin(ABC):
         key_string = f"{normalized_name}|{normalized_address}|{normalized_city}|{state}|{zip_code}"
         return hashlib.md5(key_string.encode()).hexdigest()
 
+    def has_address_changed(self, existing_data: Dict[str, Any], new_data: Dict[str, Any]) -> bool:
+        """
+        Check if address fields have changed between existing and new polling place data.
+        
+        Args:
+            existing_data: Dictionary with existing polling place data
+            new_data: Dictionary with new polling place data
+            
+        Returns:
+            True if any address field has changed, False otherwise
+        """
+        address_fields = ['address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code']
+        
+        for field in address_fields:
+            existing_value = existing_data.get(field, '').strip()
+            new_value = new_data.get(field, '').strip()
+            
+            if existing_value != new_value:
+                return True
+                
+        return False
 
 
-    def sync(self) -> Dict[str, Any]:
+
+    def sync(self, election_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Sync polling place data from the source to the database.
 
         This method calls fetch_polling_places() and updates the database using
         name and address matching instead of relying on IDs.
+
+        Args:
+            election_id: Optional election ID to link assignments to
 
         Returns:
             Dictionary with sync results:
@@ -262,10 +287,28 @@ class BasePlugin(ABC):
                         existing = self.db.session.get(PollingPlace, data['id'])
 
                         if existing:
+                            # Check if address has changed
+                            existing_data = {
+                                'address_line1': existing.address_line1 or '',
+                                'address_line2': existing.address_line2 or '',
+                                'address_line3': existing.address_line3 or '',
+                                'city': existing.city or '',
+                                'state': existing.state or '',
+                                'zip_code': existing.zip_code or ''
+                            }
+                            
+                            address_changed = self.has_address_changed(existing_data, data)
+                            
                             # Update existing record
                             for key, value in data.items():
                                 if hasattr(existing, key):
+                                    # Preserve existing coordinates if address hasn't changed
+                                    if not address_changed and key in ['latitude', 'longitude']:
+                                        continue
                                     setattr(existing, key, value)
+                            
+                            if address_changed:
+                                self.app.logger.info(f"Address changed for {existing.name}, will require re-geocoding")
                             updated += 1
                         else:
                             # Create new record
@@ -282,7 +325,7 @@ class BasePlugin(ABC):
                 self.db.session.commit()
 
                 # Sync precincts if available
-                precinct_result = self.sync_precincts()
+                precinct_result = self.sync_precincts(election_id=election_id)
 
                 # Update sync stats
                 self.last_sync = datetime.utcnow()
@@ -342,7 +385,7 @@ class BasePlugin(ABC):
 
 
 
-    def sync_precincts(self, effective_date: date = None, election_id: int = None) -> Dict[str, int]:
+    def sync_precincts(self, effective_date: date = None, election_id: Optional[int] = None) -> Dict[str, int]:
         """
         Sync precinct data from the source to the database.
 
