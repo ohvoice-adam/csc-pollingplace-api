@@ -9,6 +9,7 @@ compatible with Google Civic Data API.
 import os
 import secrets
 import bcrypt
+import logging
 from datetime import datetime
 from functools import wraps
 from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session
@@ -26,6 +27,10 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s in %(name)s: %(message)s')
+app.logger.setLevel(logging.INFO)
 
 # Configuration
 # Database setup - supports both SQLite and PostgreSQL/Cloud SQL
@@ -271,6 +276,7 @@ class Precinct(db.Model):
     name = db.Column(db.String(255), nullable=False)
     state = db.Column(db.String(2), nullable=False, index=True)
     county = db.Column(db.String(100))
+    precinctcode = db.Column(db.String(50))  # Official precinct code from state data
     registered_voters = db.Column(db.Integer)
 
     # Current assignment tracking
@@ -296,6 +302,7 @@ class Precinct(db.Model):
             'name': self.name,
             'state': self.state,
             'county': self.county,
+            'precinctcode': self.precinctcode,
             'registered_voters': self.registered_voters,
             'current_polling_place_id': self.current_polling_place_id,
             'last_change_date': self.last_change_date.isoformat() if self.last_change_date else None,
@@ -326,6 +333,7 @@ class PrecinctAssignment(db.Model):
     # Assignment details
     precinct_id = db.Column(db.String(255), db.ForeignKey('precincts.id'), nullable=False, index=True)
     polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'), nullable=False)
+    election_id = db.Column(db.Integer, db.ForeignKey('elections.id'), index=True)  # Optional link to election
 
     # Time range
     assigned_date = db.Column(db.Date, nullable=False)
@@ -341,10 +349,11 @@ class PrecinctAssignment(db.Model):
     precinct = db.relationship('Precinct', back_populates='assignments')
     polling_place = db.relationship('PollingPlace', foreign_keys=[polling_place_id])
     previous_polling_place = db.relationship('PollingPlace', foreign_keys=[previous_polling_place_id])
+    election = db.relationship('Election', back_populates='assignments')
 
     def to_dict(self):
         """Convert model to dictionary"""
-        return {
+        result = {
             'id': self.id,
             'precinct_id': self.precinct_id,
             'polling_place_id': self.polling_place_id,
@@ -352,6 +361,50 @@ class PrecinctAssignment(db.Model):
             'removed_date': self.removed_date.isoformat() if self.removed_date else None,
             'previous_polling_place_id': self.previous_polling_place_id,
             'is_current': self.removed_date is None,
+            'election_id': self.election_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+        # Include election details if available
+        if self.election:
+            result['election'] = {
+                'id': self.election.id,
+                'date': self.election.date.isoformat() if self.election.date else None,
+                'name': self.election.name,
+                'state': self.election.state
+            }
+
+        return result
+
+
+class Election(db.Model):
+    """
+    Election model for tracking elections and their polling place configurations.
+    Each election represents a specific voting event with a date and name.
+    """
+    __tablename__ = 'elections'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)  # e.g., "2024 General Election"
+    state = db.Column(db.String(2), nullable=False, index=True)
+
+    # Metadata
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    # Relationships
+    assignments = db.relationship('PrecinctAssignment', back_populates='election')
+
+    # Unique constraint on date + state
+    __table_args__ = (db.UniqueConstraint('date', 'state', name='unique_election_date_state'),)
+
+    def to_dict(self):
+        """Convert model to dictionary"""
+        return {
+            'id': self.id,
+            'date': self.date.isoformat() if self.date else None,
+            'name': self.name,
+            'state': self.state,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -738,7 +791,11 @@ def list_plugins():
 def sync_plugin(plugin_name):
     """Trigger a data sync for a specific plugin"""
     try:
-        result = plugin_manager.sync_plugin(plugin_name)
+        # Get optional election_id from query params or body
+        election_id_str = request.args.get('election_id') or (request.json.get('election_id') if request.json else None)
+        election_id = int(election_id_str) if election_id_str else None
+
+        result = plugin_manager.sync_plugin(plugin_name, election_id=election_id)
         return jsonify(result), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -771,6 +828,119 @@ def import_historical_plugin_data(plugin_name):
             'success': True,
             'message': f'Historical import completed for {plugin_name}',
             'results': result
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/elections', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_elections():
+    """
+    Get list of elections
+    Query parameters:
+    - state: Filter by state code (e.g., ?state=VA)
+    - year: Filter by year (e.g., ?year=2024)
+    """
+    try:
+        query = Election.query
+
+        # Filter by state if provided
+        state_filter = request.args.get('state')
+        if state_filter:
+            query = query.filter_by(state=state_filter.upper())
+
+        # Filter by year if provided
+        year_filter = request.args.get('year')
+        if year_filter:
+            year = int(year_filter)
+            from datetime import date
+            start_date = date(year, 1, 1)
+            end_date = date(year, 12, 31)
+            query = query.filter(Election.date >= start_date, Election.date <= end_date)
+
+        # Order by date descending (most recent first)
+        elections = query.order_by(Election.date.desc()).all()
+
+        return jsonify({
+            'count': len(elections),
+            'elections': [e.to_dict() for e in elections]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/elections/<int:election_id>', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_election(election_id):
+    """
+    Get a specific election by ID with statistics
+    """
+    try:
+        election = Election.query.get_or_404(election_id)
+
+        # Get statistics about this election
+        assignment_count = PrecinctAssignment.query.filter_by(election_id=election_id).count()
+        precinct_count = db.session.query(PrecinctAssignment.precinct_id).filter_by(election_id=election_id).distinct().count()
+
+        result = election.to_dict()
+        result['stats'] = {
+            'total_assignments': assignment_count,
+            'unique_precincts': precinct_count
+        }
+
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+
+@app.route('/api/elections/<int:election_id>/precincts', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_election_precincts(election_id):
+    """
+    Get precincts as they were assigned in a specific election
+    Query parameters:
+    - county: Filter by county
+    """
+    try:
+        election = Election.query.get_or_404(election_id)
+
+        # Get all precinct assignments for this election
+        query = db.session.query(
+            Precinct,
+            PrecinctAssignment
+        ).join(
+            PrecinctAssignment,
+            Precinct.id == PrecinctAssignment.precinct_id
+        ).filter(
+            PrecinctAssignment.election_id == election_id
+        )
+
+        # Filter by county if provided
+        county_filter = request.args.get('county')
+        if county_filter:
+            query = query.filter(Precinct.county == county_filter)
+
+        results = query.all()
+
+        # Build response with precinct data and election-specific assignment
+        precincts = []
+        for precinct, assignment in results:
+            precinct_data = precinct.to_dict()
+            # Add election-specific polling place assignment
+            precinct_data['election_polling_place_id'] = assignment.polling_place_id
+            precinct_data['election_assigned_date'] = assignment.assigned_date.isoformat() if assignment.assigned_date else None
+            precinct_data['election_removed_date'] = assignment.removed_date.isoformat() if assignment.removed_date else None
+            precinct_data['previous_polling_place_id'] = assignment.previous_polling_place_id
+            precincts.append(precinct_data)
+
+        return jsonify({
+            'election': election.to_dict(),
+            'count': len(precincts),
+            'precincts': precincts
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -899,6 +1069,173 @@ def admin_change_password():
             return redirect(url_for('admin_dashboard'))
 
     return render_template('admin/change_password.html')
+
+
+@app.route('/admin/plugins')
+@login_required
+def admin_plugins():
+    """Admin page to manage plugins"""
+    plugins = plugin_manager.list_plugins()
+    uploadable_plugins = [p['name'] for p in plugins if hasattr(plugin_manager.get_plugin(p['name']), 'supports_file_upload') and plugin_manager.get_plugin(p['name']).supports_file_upload]
+    return render_template('admin/plugins.html', plugins=plugins, uploadable_plugins=uploadable_plugins)
+
+
+@app.route('/admin/plugins/<plugin_name>/sync', methods=['POST'])
+@login_required
+def admin_sync_plugin(plugin_name):
+    """Trigger sync for a specific plugin"""
+    try:
+        result = plugin_manager.sync_plugin(plugin_name)
+        flash(f'Sync completed for {plugin_name}: {result["message"]}', 'success')
+    except Exception as e:
+        flash(f'Error syncing {plugin_name}: {str(e)}', 'error')
+    return redirect(url_for('admin_plugins'))
+
+
+@app.route('/admin/plugins/sync-all', methods=['POST'])
+@login_required
+def admin_sync_all_plugins():
+    """Trigger sync for all plugins"""
+    try:
+        results = plugin_manager.sync_all_plugins()
+        flash(f'Sync completed for all non-dummy plugins: {len(results)} processed', 'success')
+    except Exception as e:
+        flash(f'Error syncing all plugins: {str(e)}', 'error')
+    return redirect(url_for('admin_plugins'))
+
+
+@app.route('/admin/plugins/config', methods=['GET', 'POST'])
+@login_required
+def admin_plugins_config():
+    """Configure plugin sync settings"""
+    if request.method == 'POST':
+        auto_sync_enabled = request.form.get('auto_sync_enabled') == 'on'
+        sync_interval_hours = request.form.get('sync_interval_hours', 24)
+
+        # Update environment variables (note: this won't persist across restarts without .env update)
+        os.environ['AUTO_SYNC_ENABLED'] = str(auto_sync_enabled)
+        os.environ['SYNC_INTERVAL_HOURS'] = str(sync_interval_hours)
+
+        # Restart scheduler if needed
+        if auto_sync_enabled:
+            scheduler.add_job(
+                func=sync_all_plugins_job,
+                trigger='interval',
+                hours=int(sync_interval_hours),
+                id='sync_all_plugins',
+                name='Sync all state plugins',
+                replace_existing=True
+            )
+        else:
+            scheduler.remove_job('sync_all_plugins')
+
+        flash('Plugin sync configuration updated', 'success')
+        return redirect(url_for('admin_plugins_config'))
+
+    # Get current settings
+    auto_sync_enabled = os.getenv('AUTO_SYNC_ENABLED', 'False').lower() == 'true'
+    sync_interval_hours = int(os.getenv('SYNC_INTERVAL_HOURS', '24'))
+
+    return render_template('admin/plugins_config.html',
+                         auto_sync_enabled=auto_sync_enabled,
+                         sync_interval_hours=sync_interval_hours)
+
+
+@app.route('/admin/geocoding-config', methods=['GET', 'POST'])
+@login_required
+def admin_geocoding_config():
+    """Configure geocoding API keys"""
+    if request.method == 'POST':
+        google_key = request.form.get('google_geocoding_api_key')
+        mapbox_token = request.form.get('mapbox_access_token')
+
+        # Update .env file
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+
+        # Update or add lines
+        updated_lines = []
+        google_updated = False
+        mapbox_updated = False
+        for line in lines:
+            if line.startswith('GOOGLE_GEOCODING_API_KEY='):
+                updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
+                google_updated = True
+            elif line.startswith('MAPBOX_ACCESS_TOKEN='):
+                updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
+                mapbox_updated = True
+            else:
+                updated_lines.append(line)
+
+        if not google_updated:
+            updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
+        if not mapbox_updated:
+            updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
+
+        with open(env_path, 'w') as f:
+            f.writelines(updated_lines)
+
+        # Update os.environ
+        os.environ['GOOGLE_GEOCODING_API_KEY'] = google_key
+        os.environ['MAPBOX_ACCESS_TOKEN'] = mapbox_token
+
+        flash('Geocoding configuration updated', 'success')
+        return redirect(url_for('admin_geocoding_config'))
+
+    # Get current settings
+    google_key = os.getenv('GOOGLE_GEOCODING_API_KEY', '')
+    mapbox_token = os.getenv('MAPBOX_ACCESS_TOKEN', '')
+
+    return render_template('admin/geocoding_config.html',
+                         google_key=google_key,
+                         mapbox_token=mapbox_token)
+
+
+@app.route('/admin/plugins/<plugin_name>/upload', methods=['GET', 'POST'])
+@login_required
+def admin_upload_plugin_file(plugin_name):
+    """Upload file for a plugin that supports it"""
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not hasattr(plugin, 'supports_file_upload') or not plugin.supports_file_upload:
+            flash(f'Plugin {plugin_name} does not support file uploads', 'error')
+            return redirect(url_for('admin_plugins'))
+
+        if request.method == 'POST':
+            if 'file' not in request.files:
+                flash('No file part', 'error')
+                return redirect(request.url)
+
+            file = request.files['file']
+            if file.filename == '':
+                flash('No selected file', 'error')
+                return redirect(request.url)
+
+            if file and file.filename.endswith('.csv'):
+                # Save file temporarily
+                temp_path = os.path.join('/tmp', f'{plugin_name}_{file.filename}')
+                file.save(temp_path)
+
+                # Call plugin's upload method
+                result = plugin.upload_file(temp_path)
+
+                # Clean up temp file
+                os.remove(temp_path)
+
+                if result['success']:
+                    flash(result['message'], 'success')
+                else:
+                    flash(result['message'], 'error')
+            else:
+                flash('Only CSV files are allowed', 'error')
+
+            return redirect(url_for('admin_plugins'))
+
+        return render_template('admin/plugin_upload.html', plugin=plugin)
+    except Exception as e:
+        flash(f'Error uploading file: {str(e)}', 'error')
+        return redirect(url_for('admin_plugins'))
 
 
 # Scheduling functions

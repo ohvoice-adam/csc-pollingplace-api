@@ -376,6 +376,7 @@ class OhioPlugin(BasePlugin):
                 'name': precinct_name,
                 'state': 'OH',
                 'county': county_name,
+                'precinctcode': state_precinct_code,  # Add state precinct code
                 'polling_place_id': polling_place['id'],
             }
             precincts.append(precinct_data)

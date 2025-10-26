@@ -236,6 +236,7 @@ class DummyPlugin(BasePlugin):
                         'name': f"Precinct {precinct_num}",
                         'state': state_code,
                         'county': random.choice(counties),
+                        'precinctcode': f"{precinct_num:03d}",  # Add synthetic precinct code
                         'registered_voters': random.randint(500, 5000),
                         'polling_place_id': polling_place_id
                     }
