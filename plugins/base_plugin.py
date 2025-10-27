@@ -224,9 +224,9 @@ class BasePlugin(ABC):
         address_fields = ['address_line1', 'address_line2', 'address_line3', 'city', 'state', 'zip_code']
         
         for field in address_fields:
-            existing_value = existing_data.get(field, '').strip()
-            new_value = new_data.get(field, '').strip()
-            
+            existing_value = (existing_data.get(field, '') or '').strip()
+            new_value = (new_data.get(field, '') or '').strip()
+
             if existing_value != new_value:
                 return True
                 
@@ -473,6 +473,8 @@ class BasePlugin(ABC):
                             existing.name = data['name']
                         if 'county' in data:
                             existing.county = data['county']
+                        if 'precinctcode' in data:
+                            existing.precinctcode = data['precinctcode']
                         if 'registered_voters' in data:
                             existing.registered_voters = data['registered_voters']
                         if 'state' in data:

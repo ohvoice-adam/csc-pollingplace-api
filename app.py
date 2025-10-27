@@ -29,7 +29,12 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure logging
+log_file = os.path.join(os.path.dirname(__file__), 'app.log')
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s in %(name)s: %(message)s')
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s in %(name)s: %(message)s'))
+logging.getLogger().addHandler(file_handler)
 app.logger.setLevel(logging.INFO)
 
 # Configuration
@@ -1236,6 +1241,40 @@ def admin_upload_plugin_file(plugin_name):
     except Exception as e:
         flash(f'Error uploading file: {str(e)}', 'error')
         return redirect(url_for('admin_plugins'))
+
+
+@app.route('/docs/plugins/<plugin_name>_<doc_type>.md')
+@login_required
+def plugin_docs(plugin_name, doc_type):
+    """Serve plugin documentation files"""
+    if doc_type not in ['user', 'technical']:
+        flash('Invalid documentation type', 'error')
+        return redirect(url_for('admin_plugins'))
+
+    doc_path = os.path.join('docs', 'plugins', f'{plugin_name}_{doc_type}.md')
+    if not os.path.exists(doc_path):
+        flash(f'Documentation not found for {plugin_name}', 'error')
+        return redirect(url_for('admin_plugins'))
+
+    with open(doc_path, 'r') as f:
+        content = f.read()
+
+    return render_template('admin/plugin_docs.html', plugin_name=plugin_name, doc_type=doc_type, content=content)
+
+
+@app.route('/admin/logs')
+@login_required
+def admin_logs():
+    """View application logs"""
+    try:
+        with open(log_file, 'r') as f:
+            lines = f.readlines()
+        # Show last 100 lines
+        content = ''.join(lines[-100:])
+    except Exception as e:
+        content = f"Error reading log file: {str(e)}"
+
+    return render_template('admin/logs.html', content=content)
 
 
 # Scheduling functions

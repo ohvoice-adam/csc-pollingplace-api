@@ -8,7 +8,7 @@ and provides an interface for interacting with them.
 import os
 import importlib
 import inspect
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from .base_plugin import BasePlugin
 
 
@@ -113,12 +113,13 @@ class PluginManager:
         """
         return [plugin.get_status() for plugin in self.plugins.values()]
 
-    def sync_plugin(self, name: str) -> Dict[str, Any]:
+    def sync_plugin(self, name: str, election_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Trigger a data sync for a specific plugin.
 
         Args:
             name: Plugin name
+            election_id: Optional election ID to link assignments to
 
         Returns:
             Sync result dictionary
@@ -127,7 +128,7 @@ class PluginManager:
             KeyError: If plugin not found
         """
         plugin = self.get_plugin(name)
-        return plugin.sync()
+        return plugin.sync(election_id=election_id)
 
     def sync_all_plugins(self) -> Dict[str, Any]:
         """
@@ -139,6 +140,10 @@ class PluginManager:
         results = {}
 
         for name, plugin in self.plugins.items():
+            # Skip dummy plugin
+            if name == 'dummy':
+                continue
+
             try:
                 results[name] = plugin.sync()
             except Exception as e:

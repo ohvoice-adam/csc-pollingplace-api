@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - CSC Polling Place API</title>
+    <title>Geocoding Configuration - Admin Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -181,10 +181,10 @@
 <body>
     <div class="container">
         <header>
-            <h1>Admin Dashboard</h1>
+            <h1>Geocoding Configuration</h1>
             <div class="header-actions">
-                <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">View Logs</a>
-                <a href="{{ url_for('admin_change_password') }}" class="btn btn-secondary">Change Password</a>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                <a href="{{ url_for('admin_plugins') }}" class="btn btn-secondary">Manage Plugins</a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
             </div>
         </header>
@@ -198,92 +198,23 @@
         {% endwith %}
 
         <div class="card">
-            <h2>Quick Actions</h2>
-            <div class="header-actions">
-                <a href="{{ url_for('admin_plugins') }}" class="btn btn-primary">Manage Plugins</a>
-                <a href="{{ url_for('admin_plugins_config') }}" class="btn btn-secondary">Sync Configuration</a>
-                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-secondary">Geocoding Config</a>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Create New API Key</h2>
-            <form method="POST" action="{{ url_for('admin_create_key') }}">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="name">Key Name / Description *</label>
-                        <input type="text" id="name" name="name" required placeholder="e.g., Mobile App Key">
-                    </div>
-                    <div class="form-group">
-                        <label for="rate_limit_per_day">Rate Limit (per day)</label>
-                        <input type="number" id="rate_limit_per_day" name="rate_limit_per_day" placeholder="Leave empty for unlimited">
-                    </div>
-                    <div class="form-group">
-                        <label for="rate_limit_per_hour">Rate Limit (per hour)</label>
-                        <input type="number" id="rate_limit_per_hour" name="rate_limit_per_hour" placeholder="Leave empty for unlimited">
-                    </div>
+            <h2>Geocoding API Keys</h2>
+            <p>Configure API keys for geocoding services. These are used as fallbacks if the primary Census API fails.</p>
+            <form method="POST">
+                <div class="form-group">
+                    <label for="google_geocoding_api_key">Google Geocoding API Key</label>
+                    <input type="text" id="google_geocoding_api_key" name="google_geocoding_api_key" value="{{ google_key }}" placeholder="Enter Google API key (free tier: 40,000 requests/month)">
+                    <small class="form-text text-muted">Get from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a>. Enable Geocoding API.</small>
                 </div>
-                <button type="submit" class="btn btn-primary">Create API Key</button>
-            </form>
-        </div>
 
-        <div class="card">
-            <h2>API Keys ({{ api_keys|length }})</h2>
-            {% if api_keys %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>API Key</th>
-                            <th>Status</th>
-                            <th>Rate Limits</th>
-                            <th>Created</th>
-                            <th>Last Used</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for key in api_keys %}
-                        <tr>
-                            <td><strong>{{ key.name }}</strong></td>
-                            <td><div class="api-key">{{ key.key }}</div></td>
-                            <td>
-                                {% if key.is_active %}
-                                    <span class="status-badge status-active">Active</span>
-                                {% else %}
-                                    <span class="status-badge status-inactive">Revoked</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if key.rate_limit_per_day or key.rate_limit_per_hour %}
-                                    {{ key.rate_limit_per_day or 'Unlimited' }}/day<br>
-                                    {{ key.rate_limit_per_hour or 'Unlimited' }}/hour
-                                {% else %}
-                                    <strong>Unlimited</strong>
-                                {% endif %}
-                            </td>
-                            <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') if key.created_at else 'N/A' }}</td>
-                            <td>{{ key.last_used_at.strftime('%Y-%m-%d %H:%M') if key.last_used_at else 'Never' }}</td>
-                            <td>
-                                <div class="actions">
-                                    {% if key.is_active %}
-                                        <form method="POST" action="{{ url_for('admin_revoke_key', key_id=key.id) }}" style="display: inline;">
-                                            <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Revoke this API key?')">Revoke</button>
-                                        </form>
-                                    {% else %}
-                                        <form method="POST" action="{{ url_for('admin_activate_key', key_id=key.id) }}" style="display: inline;">
-                                            <button type="submit" class="btn btn-success btn-small">Activate</button>
-                                        </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <p style="color: #666; text-align: center; padding: 40px;">No API keys yet. Create one above to get started.</p>
-            {% endif %}
+                <div class="form-group">
+                    <label for="mapbox_access_token">Mapbox Access Token</label>
+                    <input type="text" id="mapbox_access_token" name="mapbox_access_token" value="{{ mapbox_token }}" placeholder="Enter Mapbox access token (free tier: 100,000 requests/month)">
+                    <small class="form-text text-muted">Get from <a href="https://account.mapbox.com/access-tokens/" target="_blank">Mapbox Account</a>.</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Update Configuration</button>
+            </form>
         </div>
     </div>
 </body>
