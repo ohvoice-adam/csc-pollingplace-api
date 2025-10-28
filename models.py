@@ -27,6 +27,62 @@ class PollingPlace(db.Model):
     source_plugin = db.Column(db.String(100))
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        """Convert model to standard dictionary format"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'address_line1': self.address_line1,
+            'address_line2': self.address_line2,
+            'address_line3': self.address_line3,
+            'city': self.city,
+            'state': self.state,
+            'zip_code': self.zip_code,
+            'county': self.county,
+            'latitude': self.latitude,
+            'longitude': self.longitude,
+            'polling_hours': self.polling_hours,
+            'notes': self.notes,
+            'source_plugin': self.source_plugin,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+        }
+
+    def to_vip_format(self):
+        """
+        Convert model to VIP (Voting Information Project) format
+        Compatible with Google Civic Data API
+        """
+        address = {
+            'line1': self.address_line1,
+            'line2': self.address_line2,
+            'line3': self.address_line3,
+            'city': self.city,
+            'state': self.state,
+            'zip': self.zip_code
+        }
+
+        # Remove None values from address
+        address = {k: v for k, v in address.items() if v is not None}
+
+        vip_data = {
+            'id': self.id,
+            'name': self.name,
+            'address': address,
+            'pollingHours': self.polling_hours,
+            'notes': self.notes,
+        }
+
+        # Add optional fields if present
+        if self.county:
+            vip_data['county'] = self.county
+
+        if self.latitude is not None and self.longitude is not None:
+            vip_data['latitude'] = self.latitude
+            vip_data['longitude'] = self.longitude
+
+        # Remove None values
+        return {k: v for k, v in vip_data.items() if v is not None}
+
 class Precinct(db.Model):
     id = db.Column(db.String(100), primary_key=True)
     name = db.Column(db.String(200), nullable=False)

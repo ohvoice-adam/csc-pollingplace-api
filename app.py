@@ -116,8 +116,8 @@ plugin_manager = PluginManager(app, db)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-# Import models after db is initialized
-from models import User, PollingPlace, Precinct, PrecinctAssignment, Election
+# Import UserMixin for AdminUser
+from flask_login import UserMixin
 
 # Create tables
 with app.app_context():
@@ -238,6 +238,7 @@ class PollingPlace(db.Model):
     city = db.Column(db.String(100), nullable=False)
     state = db.Column(db.String(2), nullable=False)
     zip_code = db.Column(db.String(10), nullable=False)
+    county = db.Column(db.String(100))  # County information
 
     # Coordinates (WGS 84 decimal degrees)
     latitude = db.Column(db.Float)
@@ -270,6 +271,7 @@ class PollingPlace(db.Model):
             'city': self.city,
             'state': self.state,
             'zip_code': self.zip_code,
+            'county': self.county,
             'latitude': self.latitude,
             'longitude': self.longitude,
             'polling_hours': self.polling_hours,
@@ -310,6 +312,9 @@ class PollingPlace(db.Model):
         }
 
         # Add optional fields if present
+        if self.county:
+            vip_data['county'] = self.county
+
         if self.latitude is not None and self.longitude is not None:
             vip_data['latitude'] = self.latitude
             vip_data['longitude'] = self.longitude
