@@ -306,7 +306,10 @@ class BasePlugin(ABC):
                                     if not address_changed and key in ['latitude', 'longitude']:
                                         continue
                                     setattr(existing, key, value)
-                            
+
+                            # Update updated_at timestamp
+                            existing.updated_at = datetime.utcnow()
+
                             if address_changed:
                                 self.app.logger.info(f"Address changed for {existing.name}, will require re-geocoding")
                             updated += 1

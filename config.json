@@ -1,0 +1,7 @@
+{
+    "geocoder_priority": [
+        "Mapbox",
+        "Census",
+        "Google"
+    ]
+}

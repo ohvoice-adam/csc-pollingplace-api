@@ -199,11 +199,14 @@
 
         <div class="card">
             <h2>Quick Actions</h2>
-            <div class="header-actions">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
                 <a href="{{ url_for('admin_plugins') }}" class="btn btn-primary">Manage Plugins</a>
-                <a href="{{ url_for('admin_plugins_config') }}" class="btn btn-secondary">Sync Configuration</a>
-                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-secondary">Geocoding Config</a>
+                <a href="{{ url_for('admin_logs') }}" class="btn btn-primary">View Logs</a>
+                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-primary">Geocoding Priority</a>
+                <a href="{{ url_for('admin_geocoding_api_config') }}" class="btn btn-primary">Geocoding API Keys</a>
+                <a href="{{ url_for('admin_change_password') }}" class="btn btn-primary">Change Password</a>
             </div>
+        </div>
         </div>
 
         <div class="card">

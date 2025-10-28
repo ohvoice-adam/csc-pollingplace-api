@@ -7,6 +7,7 @@ compatible with Google Civic Data API.
 """
 
 import os
+import json
 import secrets
 import bcrypt
 import logging
@@ -26,6 +27,101 @@ from plugins.plugin_manager import PluginManager
 load_dotenv()
 
 # Initialize Flask app
+app = Flask(__name__)
+
+# Configure logging
+log_file = os.path.join(os.path.dirname(__file__), 'app.log')
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s in %(name)s: %(message)s')
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s in %(name)s: %(message)s'))
+logging.getLogger().addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
+
+# Configuration
+# Database setup - supports both SQLite and PostgreSQL/Cloud SQL
+db_type = os.getenv('DB_TYPE', 'sqlite').lower()
+
+if db_type == 'postgresql' or db_type == 'postgres':
+    # PostgreSQL configuration
+    db_user = os.getenv('DB_USER', 'postgres')
+    db_password = os.getenv('DB_PASSWORD', '')
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_port = os.getenv('DB_PORT', '5432')
+    db_name = os.getenv('DB_NAME', 'pollingplaces')
+    
+    # Check if using Cloud SQL Unix socket
+    if db_host.startswith('/cloudsql/'):
+        # Cloud SQL with Unix socket
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@/{db_name}?host={db_host}'
+    else:
+        # Standard PostgreSQL
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+else:
+    # SQLite configuration
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pollingplaces.db'
+
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+
+# Load configuration
+config_file = os.path.join(os.path.dirname(__file__), 'config.json')
+if os.path.exists(config_file):
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+else:
+    config = {
+        'geocoder_priority': ['Mapbox', 'Census', 'Google']
+    }
+
+app.config['geocoder_priority'] = config['geocoder_priority']
+
+# Initialize extensions
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'admin_login'
+
+# Rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
+# Add timezone filter for templates
+@app.template_filter('timezone_filter')
+def timezone_filter(timestamp):
+    """Convert UTC timestamp to local time for display"""
+    if timestamp is None:
+        return None
+    from datetime import datetime, timedelta
+    
+    # Parse the timestamp if it's a string
+    if isinstance(timestamp, str):
+        try:
+            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        except:
+            return timestamp
+    
+    # Convert UTC to Eastern Time (UTC-4 or UTC-5 depending on DST)
+    # For simplicity, we'll use UTC-4 (EDT) - adjust as needed
+    eastern_time = timestamp - timedelta(hours=4)
+    return eastern_time.strftime('%Y-%m-%d %H:%M:%S')
+
+# Initialize plugin manager
+plugin_manager = PluginManager(app, db)
+
+# Initialize scheduler
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+# Import models after db is initialized
+from models import User, PollingPlace, Precinct, PrecinctAssignment, Election
+
+# Create tables
+with app.app_context():
+    db.create_all()
 app = Flask(__name__)
 
 # Configure logging
@@ -1146,55 +1242,6 @@ def admin_plugins_config():
                          sync_interval_hours=sync_interval_hours)
 
 
-@app.route('/admin/geocoding-config', methods=['GET', 'POST'])
-@login_required
-def admin_geocoding_config():
-    """Configure geocoding API keys"""
-    if request.method == 'POST':
-        google_key = request.form.get('google_geocoding_api_key')
-        mapbox_token = request.form.get('mapbox_access_token')
-
-        # Update .env file
-        env_path = os.path.join(os.path.dirname(__file__), '.env')
-        with open(env_path, 'r') as f:
-            lines = f.readlines()
-
-        # Update or add lines
-        updated_lines = []
-        google_updated = False
-        mapbox_updated = False
-        for line in lines:
-            if line.startswith('GOOGLE_GEOCODING_API_KEY='):
-                updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
-                google_updated = True
-            elif line.startswith('MAPBOX_ACCESS_TOKEN='):
-                updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
-                mapbox_updated = True
-            else:
-                updated_lines.append(line)
-
-        if not google_updated:
-            updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
-        if not mapbox_updated:
-            updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
-
-        with open(env_path, 'w') as f:
-            f.writelines(updated_lines)
-
-        # Update os.environ
-        os.environ['GOOGLE_GEOCODING_API_KEY'] = google_key
-        os.environ['MAPBOX_ACCESS_TOKEN'] = mapbox_token
-
-        flash('Geocoding configuration updated', 'success')
-        return redirect(url_for('admin_geocoding_config'))
-
-    # Get current settings
-    google_key = os.getenv('GOOGLE_GEOCODING_API_KEY', '')
-    mapbox_token = os.getenv('MAPBOX_ACCESS_TOKEN', '')
-
-    return render_template('admin/geocoding_config.html',
-                         google_key=google_key,
-                         mapbox_token=mapbox_token)
 
 
 @app.route('/admin/plugins/<plugin_name>/upload', methods=['GET', 'POST'])
@@ -1277,6 +1324,76 @@ def admin_logs():
     return render_template('admin/logs.html', content=content)
 
 
+@app.route('/admin/geocoding_config', methods=['GET', 'POST'])
+@login_required
+def admin_geocoding_config():
+    """Configure geocoding priority"""
+    global config
+    if request.method == 'POST':
+        priority = request.form.get('geocoder_priority', '').split(',')
+        priority = [p.strip() for p in priority if p.strip()]
+        config['geocoder_priority'] = priority
+        app.config['geocoder_priority'] = priority
+        # Save to file
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=4)
+        flash('Geocoding configuration updated', 'success')
+        return redirect(url_for('admin_geocoding_config'))
+
+    return render_template('admin/geocoding_config.html', priority=','.join(config['geocoder_priority']))
+
+
+@app.route('/admin/geocoding-api-config', methods=['GET', 'POST'])
+@login_required
+def admin_geocoding_api_config():
+    """Configure geocoding API keys"""
+    if request.method == 'POST':
+        google_key = request.form.get('google_geocoding_api_key')
+        mapbox_token = request.form.get('mapbox_access_token')
+
+        # Update .env file
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+
+        # Update or add lines
+        updated_lines = []
+        google_updated = False
+        mapbox_updated = False
+        for line in lines:
+            if line.startswith('GOOGLE_GEOCODING_API_KEY='):
+                updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
+                google_updated = True
+            elif line.startswith('MAPBOX_ACCESS_TOKEN='):
+                updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
+                mapbox_updated = True
+            else:
+                updated_lines.append(line)
+
+        if not google_updated:
+            updated_lines.append(f'GOOGLE_GEOCODING_API_KEY={google_key}\n')
+        if not mapbox_updated:
+            updated_lines.append(f'MAPBOX_ACCESS_TOKEN={mapbox_token}\n')
+
+        with open(env_path, 'w') as f:
+            f.writelines(updated_lines)
+
+        # Update os.environ
+        os.environ['GOOGLE_GEOCODING_API_KEY'] = google_key
+        os.environ['MAPBOX_ACCESS_TOKEN'] = mapbox_token
+
+        flash('Geocoding API keys updated', 'success')
+        return redirect(url_for('admin_geocoding_api_config'))
+
+    # Get current settings
+    google_key = os.getenv('GOOGLE_GEOCODING_API_KEY', '')
+    mapbox_token = os.getenv('MAPBOX_ACCESS_TOKEN', '')
+
+    return render_template('admin/geocoding_api_config.html',
+                          google_key=google_key,
+                          mapbox_token=mapbox_token)
+
+
 # Scheduling functions
 def sync_all_plugins_job():
     """Background job to sync all plugins"""
@@ -1284,6 +1401,10 @@ def sync_all_plugins_job():
         app.logger.info("Running scheduled sync for all plugins")
         results = plugin_manager.sync_all_plugins()
         app.logger.info(f"Scheduled sync completed: {results}")
+
+
+# Initialize scheduler after function is defined
+scheduler.add_job(func=sync_all_plugins_job, trigger="interval", hours=24)
 
 
 # Create tables and initialize

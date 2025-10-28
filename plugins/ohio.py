@@ -72,21 +72,22 @@ class OhioPlugin(BasePlugin):
 
         self.app.logger.info(f"Starting geocoding for {len(polling_places)} polling places")
 
-        # Try Census first
-        self.app.logger.info("Attempting Census geocoding")
-        self._geocode_census(polling_places)
+        # Try geocoders in priority order
+        geocoder_priority = self.app.config.get('geocoder_priority', ['Mapbox', 'Census', 'Google'])
+        for geocoder in geocoder_priority:
+            failed_places = [pp for pp in polling_places if 'latitude' not in pp]
+            if not failed_places:
+                break
 
-        # For failed ones, try Google
-        failed_places = [pp for pp in polling_places if 'latitude' not in pp]
-        self.app.logger.info(f"Census geocoding complete. {len(failed_places)} addresses failed, trying Google")
-        if failed_places:
-            self._geocode_google(failed_places)
-
-        # For still failed, try Mapbox
-        failed_places = [pp for pp in polling_places if 'latitude' not in pp]
-        self.app.logger.info(f"Google geocoding complete. {len(failed_places)} addresses failed, trying Mapbox")
-        if failed_places:
-            self._geocode_mapbox(failed_places)
+            self.app.logger.info(f"Attempting {geocoder} geocoding for {len(failed_places)} addresses")
+            if geocoder == 'Census':
+                self._geocode_census(failed_places)
+            elif geocoder == 'Google':
+                self._geocode_google(failed_places)
+            elif geocoder == 'Mapbox':
+                self._geocode_mapbox(failed_places)
+            else:
+                self.app.logger.warning(f"Unknown geocoder: {geocoder}")
 
         # Final status
         geocoded = [pp for pp in polling_places if 'latitude' in pp]
@@ -206,7 +207,7 @@ class OhioPlugin(BasePlugin):
         self.app.logger.info(f"Starting Mapbox geocoding for {len(polling_places)} addresses")
         for pp in polling_places:
             address = f"{pp['address_line1']}, {pp['city']}, OH {pp['zip_code']}"
-            url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{quote(address)}.json?access_token={access_token}"
+            url = f"https://api.mapbox.com/search/geocode/v6/forward?q={quote(address)}&permanent=false&access_token={access_token}"
 
             try:
                 self.app.logger.debug(f"Mapbox request for {pp['id']}: {address}")
@@ -214,10 +215,10 @@ class OhioPlugin(BasePlugin):
                 if response.status_code == 200:
                     data = response.json()
                     if data['features']:
-                        location = data['features'][0]['geometry']['coordinates']
-                        pp['longitude'] = location[0]
-                        pp['latitude'] = location[1]
-                        self.app.logger.info(f"Mapbox geocoded {pp['id']}: {location[1]}, {location[0]}")
+                        location = data['features'][0]['properties']['coordinates']
+                        pp['longitude'] = location['longitude']
+                        pp['latitude'] = location['latitude']
+                        self.app.logger.info(f"Mapbox geocoded {pp['id']}: {location['latitude']}, {location['longitude']}")
                     else:
                         self.app.logger.warning(f"Mapbox geocoding failed for {pp['id']}: {address}")
                 else:

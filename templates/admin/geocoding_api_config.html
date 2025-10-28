@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geocoding Configuration - Admin Dashboard</title>
+    <title>Geocoding API Configuration - Admin Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -12,7 +12,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 1200px;
+            max-width: 800px;
             margin: 0 auto;
         }
         header {
@@ -43,37 +43,12 @@
             display: inline-block;
             transition: all 0.3s;
         }
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #5568d3;
-        }
         .btn-secondary {
             background: #e0e0e0;
             color: #333;
         }
         .btn-secondary:hover {
             background: #d0d0d0;
-        }
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        .btn-success:hover {
-            background: #218838;
-        }
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
         }
         .card {
             background: white;
@@ -98,11 +73,6 @@
             color: #155724;
             border: 1px solid #c3e6cb;
         }
-        .alert-error {
-            background: #fee;
-            color: #c33;
-            border: 1px solid #fcc;
-        }
         .form-group {
             margin-bottom: 15px;
         }
@@ -114,77 +84,38 @@
             font-size: 14px;
         }
         input[type="text"],
-        input[type="number"] {
+        input[type="password"] {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        th {
-            background: #f9f9f9;
-            font-weight: 600;
-            color: #555;
-            font-size: 13px;
-            text-transform: uppercase;
-        }
-        td {
-            font-size: 14px;
-        }
-        .status-badge {
-            padding: 4px 8px;
-            border-radius: 12px;
+        .help-text {
             font-size: 12px;
-            font-weight: 500;
+            color: #666;
+            margin-top: 5px;
         }
-        .status-active {
-            background: #d4edda;
-            color: #155724;
-        }
-        .status-inactive {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .api-key {
-            font-family: 'Courier New', monospace;
-            background: #f4f4f4;
-            padding: 6px 10px;
-            border-radius: 4px;
+        .api-key-status {
             font-size: 12px;
-            word-break: break-all;
+            margin-top: 5px;
         }
-        .actions {
-            display: flex;
-            gap: 5px;
+        .configured {
+            color: #28a745;
         }
-        .form-row {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 15px;
-        }
-        @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
+        .not-configured {
+            color: #dc3545;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Geocoding Configuration</h1>
+            <h1>Geocoding API Configuration</h1>
             <div class="header-actions">
-                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-                <a href="{{ url_for('admin_plugins') }}" class="btn btn-secondary">Manage Plugins</a>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Dashboard</a>
+                <a href="{{ url_for('admin_plugins') }}" class="btn btn-secondary">Plugins</a>
+                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-secondary">Geocoding Priority</a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
             </div>
         </header>
@@ -198,17 +129,29 @@
         {% endwith %}
 
         <div class="card">
-            <h2>Geocoder Priority Order</h2>
-            <p>Set the order in which geocoding services are used. Available options: Census, Google, Mapbox.</p>
+            <h2>API Keys</h2>
+            <p>Configure API keys for geocoding services. These are required for geocoding functionality.</p>
 
             <form method="POST">
                 <div class="form-group">
-                    <label for="geocoder_priority">Geocoder Priority (comma-separated)</label>
-                    <input type="text" id="geocoder_priority" name="geocoder_priority" value="{{ priority }}" required>
-                    <div class="help-text">Example: Census,Google,Mapbox</div>
+                    <label for="google_geocoding_api_key">Google Geocoding API Key</label>
+                    <input type="password" id="google_geocoding_api_key" name="google_geocoding_api_key" value="{{ google_key }}" placeholder="Enter Google API key">
+                    <div class="api-key-status {{ 'configured' if google_key else 'not-configured' }}">
+                        {{ 'Configured' if google_key else 'Not configured' }}
+                    </div>
+                    <div class="help-text">Get your API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Update Configuration</button>
+                <div class="form-group">
+                    <label for="mapbox_access_token">Mapbox Access Token</label>
+                    <input type="password" id="mapbox_access_token" name="mapbox_access_token" value="{{ mapbox_token }}" placeholder="Enter Mapbox access token">
+                    <div class="api-key-status {{ 'configured' if mapbox_token else 'not-configured' }}">
+                        {{ 'Configured' if mapbox_token else 'Not configured' }}
+                    </div>
+                    <div class="help-text">Get your access token from <a href="https://account.mapbox.com/access-tokens/" target="_blank">Mapbox Account</a></div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Update API Keys</button>
             </form>
         </div>
     </div>

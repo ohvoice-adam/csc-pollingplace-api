@@ -185,6 +185,8 @@
             <div class="header-actions">
                 <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">View Logs</a>
+                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-secondary">Geocoding Priority</a>
+                <a href="{{ url_for('admin_geocoding_api_config') }}" class="btn btn-secondary">Geocoding API Keys</a>
                 <a href="{{ url_for('admin_plugins_config') }}" class="btn btn-secondary">Configure Sync</a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
             </div>
@@ -226,7 +228,7 @@
                              <td><strong>{{ plugin.name }}</strong></td>
                              <td>{{ plugin.state_code }}</td>
                              <td>{{ plugin.description }}</td>
-                             <td>{{ plugin.last_sync or 'Never' }}</td>
+                             <td>{{ plugin.last_sync | timezone_filter if plugin.last_sync else 'Never' }}</td>
                              <td>
                                  <a href="/docs/plugins/{{ plugin.name }}_user.md" target="_blank" class="btn btn-secondary btn-small">User Guide</a>
                                  <a href="/docs/plugins/{{ plugin.name }}_technical.md" target="_blank" class="btn btn-secondary btn-small">Technical Docs</a>
