@@ -258,7 +258,6 @@ When a plugin implements `fetch_precincts()`, the API automatically:
 - Creates a historical record of the change
 - Flags precincts that have changed within the last 6 months
 - Maintains a complete audit trail of all assignment changes
-- Tracks registered voter counts per precinct
 
 ### Creating a Plugin
 
