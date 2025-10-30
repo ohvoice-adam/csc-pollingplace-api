@@ -183,6 +183,8 @@
         <header>
             <h1>Admin Dashboard</h1>
             <div class="header-actions">
+                <a href="{{ url_for('admin_map') }}" class="btn btn-primary">View Map</a>
+                <a href="{{ url_for('records_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">View Logs</a>
                 <a href="{{ url_for('admin_change_password') }}" class="btn btn-secondary">Change Password</a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
@@ -198,8 +200,46 @@
         {% endwith %}
 
         <div class="card">
+            <h2>Record Statistics</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="font-size: 32px; font-weight: bold; color: #667eea;">{{ polling_places_count }}</div>
+                    <div style="color: #666; margin-top: 5px;">Polling Places</div>
+                </div>
+                <div style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="font-size: 32px; font-weight: bold; color: #28a745;">{{ precincts_count }}</div>
+                    <div style="color: #666; margin-top: 5px;">Precincts</div>
+                </div>
+                <div style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="font-size: 32px; font-weight: bold; color: #ffc107;">{{ elections_count }}</div>
+                    <div style="color: #666; margin-top: 5px;">Elections</div>
+                </div>
+                <div style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="font-size: 32px; font-weight: bold; color: #17a2b8;">{{ assignments_count }}</div>
+                    <div style="color: #666; margin-top: 5px;">Assignments</div>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div style="text-align: center; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                    <div style="font-size: 24px; font-weight: bold; color: #0066cc;">{{ active_api_keys }}</div>
+                    <div style="color: #666; margin-top: 5px;">Active API Keys</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #d4edda; border-radius: 8px;">
+                    <div style="font-size: 24px; font-weight: bold; color: #155724;">{{ precincts_with_polling_places }}</div>
+                    <div style="color: #666; margin-top: 5px;">Precincts with Places</div>
+                </div>
+                <div style="text-align: center; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                    <div style="font-size: 24px; font-weight: bold; color: #856404;">{{ recent_elections }}</div>
+                    <div style="color: #666; margin-top: 5px;">Upcoming Elections</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
             <h2>Quick Actions</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
+                <a href="{{ url_for('records_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
                 <a href="{{ url_for('admin_plugins') }}" class="btn btn-primary">Manage Plugins</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn btn-primary">View Logs</a>
                 <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-primary">Geocoding Priority</a>
@@ -207,7 +247,134 @@
                 <a href="{{ url_for('admin_change_password') }}" class="btn btn-primary">Change Password</a>
             </div>
         </div>
+
+        {% if recent_activity %}
+        <div class="card">
+            <h2>Recent Activity</h2>
+            <div style="margin-top: 20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Action</th>
+                            <th>Table</th>
+                            <th>Record ID</th>
+                            <th>User</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for activity in recent_activity %}
+                        <tr>
+                            <td>{{ activity.timestamp.strftime('%Y-%m-%d %H:%M') if activity.timestamp else 'N/A' }}</td>
+                            <td>
+                                {% if activity.action == 'CREATE' %}
+                                    <span class="status-badge status-active">Created</span>
+                                {% elif activity.action == 'UPDATE' %}
+                                    <span class="status-badge" style="background: #fff3cd; color: #856404;">Updated</span>
+                                {% elif activity.action == 'DELETE' %}
+                                    <span class="status-badge status-inactive">Deleted</span>
+                                {% else %}
+                                    {{ activity.action }}
+                                {% endif %}
+                            </td>
+                            <td>{{ activity.table_name|title }}</td>
+                            <td><code>{{ activity.record_id }}</code></td>
+                            <td>{{ activity.username }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
+        {% endif %}
+
+        {% if recent_polling_places or recent_precincts %}
+        <div class="card">
+            <h2>Recently Edited Records</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                {% if recent_polling_places %}
+                <div>
+                    <h3 style="font-size: 16px; margin-bottom: 15px; color: #333;">Polling Places</h3>
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px;">
+                        {% for place in recent_polling_places %}
+                        <div style="padding: 8px 0; border-bottom: 1px solid #e9ecef; {% if loop.last %}border-bottom: none;{% endif %}">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>{{ place.name }}</strong><br>
+                                    <small style="color: #666;">{{ place.city }}, {{ place.state }}</small>
+                                </div>
+                                <a href="/admin/pollingplace/edit/?id={{ place.id }}" class="btn btn-secondary btn-small">Edit</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if recent_precincts %}
+                <div>
+                    <h3 style="font-size: 16px; margin-bottom: 15px; color: #333;">Precincts</h3>
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px;">
+                        {% for precinct in recent_precincts %}
+                        <div style="padding: 8px 0; border-bottom: 1px solid #e9ecef; {% if loop.last %}border-bottom: none;{% endif %}">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>{{ precinct.name }}</strong><br>
+                                    <small style="color: #666;">{{ precinct.county }}, {{ precinct.state }}</small>
+                                </div>
+                                <a href="/admin/precinct/edit/?id={{ precinct.id }}" class="btn btn-secondary btn-small">Edit</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if states_data or counties_data %}
+        <div class="card">
+            <h2>Data Distribution</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
+                {% if states_data %}
+                <div>
+                    <h3 style="font-size: 16px; margin-bottom: 15px; color: #333;">Top States by Polling Places</h3>
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px;">
+                        {% for state in states_data %}
+                        <div style="padding: 8px 0; border-bottom: 1px solid #e9ecef; {% if loop.last %}border-bottom: none;{% endif %}">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>{{ state.state }}</strong>
+                                </div>
+                                <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">{{ state.count }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if counties_data %}
+                <div>
+                    <h3 style="font-size: 16px; margin-bottom: 15px; color: #333;">Top Counties by Polling Places</h3>
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px;">
+                        {% for county in counties_data %}
+                        <div style="padding: 8px 0; border-bottom: 1px solid #e9ecef; {% if loop.last %}border-bottom: none;{% endif %}">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>{{ county.county }}</strong>
+                                </div>
+                                <span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">{{ county.count }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
         <div class="card">
             <h2>Create New API Key</h2>

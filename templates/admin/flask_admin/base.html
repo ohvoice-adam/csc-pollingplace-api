@@ -1,0 +1,618 @@
+{% extends 'admin/base.html' %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/flask_admin_custom.css') }}">
+<style>
+    /* Override Flask-Admin default styles to match existing admin theme */
+    
+    /* Primary color scheme - purple/blue (#667eea) */
+    .navbar {
+        background: #667eea !important;
+        border-bottom: none !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    .navbar-brand {
+        color: white !important;
+        font-weight: 500 !important;
+    }
+    
+    .navbar-nav > li > a {
+        color: rgba(255,255,255,0.9) !important;
+        transition: color 0.3s !important;
+    }
+    
+    .navbar-nav > li > a:hover {
+        color: white !important;
+        background: rgba(255,255,255,0.1) !important;
+    }
+    
+    .navbar-nav > .active > a {
+        background: rgba(255,255,255,0.2) !important;
+        color: white !important;
+    }
+    
+    /* Sidebar styling */
+    .nav-sidebar {
+        background: white !important;
+        border-right: 1px solid #e9ecef !important;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05) !important;
+    }
+    
+    .nav-sidebar > .nav-header {
+        background: #f8f9fa !important;
+        color: #495057 !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        font-size: 12px !important;
+        padding: 15px 20px 10px !important;
+        border-bottom: 1px solid #e9ecef !important;
+    }
+    
+    .nav-sidebar > li > a {
+        color: #495057 !important;
+        padding: 12px 20px !important;
+        border-bottom: 1px solid #f1f3f4 !important;
+        transition: all 0.3s !important;
+    }
+    
+    .nav-sidebar > li > a:hover {
+        background: #f8f9fa !important;
+        color: #667eea !important;
+        text-decoration: none !important;
+    }
+    
+    .nav-sidebar > li.active > a {
+        background: #667eea !important;
+        color: white !important;
+        border-left: 4px solid #5568d3 !important;
+    }
+    
+    /* Main content area */
+    .content {
+        background: #f5f5f5 !important;
+        padding: 20px !important;
+    }
+    
+    /* Panel/Card styling */
+    .panel {
+        background: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .panel-heading {
+        background: white !important;
+        border-bottom: 1px solid #e9ecef !important;
+        border-radius: 8px 8px 0 0 !important;
+        padding: 20px !important;
+    }
+    
+    .panel-title {
+        color: #333 !important;
+        font-size: 20px !important;
+        font-weight: 500 !important;
+    }
+    
+    .panel-body {
+        padding: 20px !important;
+    }
+    
+    /* Button styling */
+    .btn {
+        border-radius: 4px !important;
+        font-weight: 500 !important;
+        transition: all 0.3s !important;
+        border: none !important;
+        padding: 10px 20px !important;
+        font-size: 14px !important;
+    }
+    
+    .btn-primary {
+        background: #667eea !important;
+        color: white !important;
+    }
+    
+    .btn-primary:hover {
+        background: #5568d3 !important;
+        color: white !important;
+    }
+    
+    .btn-secondary {
+        background: #e0e0e0 !important;
+        color: #333 !important;
+    }
+    
+    .btn-secondary:hover {
+        background: #d0d0d0 !important;
+        color: #333 !important;
+    }
+    
+    .btn-success {
+        background: #28a745 !important;
+        color: white !important;
+    }
+    
+    .btn-success:hover {
+        background: #218838 !important;
+    }
+    
+    .btn-danger {
+        background: #dc3545 !important;
+        color: white !important;
+    }
+    
+    .btn-danger:hover {
+        background: #c82333 !important;
+    }
+    
+    .btn-warning {
+        background: #ffc107 !important;
+        color: #212529 !important;
+    }
+    
+    .btn-warning:hover {
+        background: #e0a800 !important;
+    }
+    
+    .btn-info {
+        background: #17a2b8 !important;
+        color: white !important;
+    }
+    
+    .btn-info:hover {
+        background: #138496 !important;
+    }
+    
+    /* Form styling */
+    .form-control {
+        border: 1px solid #ddd !important;
+        border-radius: 4px !important;
+        padding: 10px !important;
+        font-size: 14px !important;
+        transition: border-color 0.3s !important;
+    }
+    
+    .form-control:focus {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25) !important;
+    }
+    
+    .control-label {
+        color: #555 !important;
+        font-weight: 500 !important;
+        margin-bottom: 5px !important;
+        font-size: 14px !important;
+    }
+    
+    .form-group {
+        margin-bottom: 15px !important;
+    }
+    
+    /* Table styling */
+    .table {
+        background: white !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    .table thead th {
+        background: #f9f9f9 !important;
+        border-bottom: 1px solid #e9ecef !important;
+        color: #555 !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        text-transform: uppercase !important;
+        padding: 12px !important;
+    }
+    
+    .table tbody td {
+        border-bottom: 1px solid #f1f3f4 !important;
+        padding: 12px !important;
+        font-size: 14px !important;
+        vertical-align: middle !important;
+    }
+    
+    .table tbody tr:hover {
+        background: #f8f9fa !important;
+    }
+    
+    /* Pagination */
+    .pagination > li > a,
+    .pagination > li > span {
+        color: #667eea !important;
+        border: 1px solid #e9ecef !important;
+        margin: 0 2px !important;
+        border-radius: 4px !important;
+    }
+    
+    .pagination > .active > a,
+    .pagination > .active > span {
+        background: #667eea !important;
+        border-color: #667eea !important;
+        color: white !important;
+    }
+    
+    .pagination > li > a:hover {
+        background: #f8f9fa !important;
+        color: #5568d3 !important;
+    }
+    
+    /* Alerts */
+    .alert {
+        border-radius: 4px !important;
+        border: none !important;
+        padding: 12px !important;
+        font-size: 14px !important;
+    }
+    
+    .alert-success {
+        background: #d4edda !important;
+        color: #155724 !important;
+    }
+    
+    .alert-info {
+        background: #e7f3ff !important;
+        color: #0066cc !important;
+    }
+    
+    .alert-warning {
+        background: #fff3cd !important;
+        color: #856404 !important;
+    }
+    
+    .alert-danger {
+        background: #f8d7da !important;
+        color: #721c24 !important;
+    }
+    
+    /* Badges and labels */
+    .label {
+        border-radius: 12px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        padding: 4px 8px !important;
+    }
+    
+    .label-success {
+        background: #28a745 !important;
+    }
+    
+    .label-danger {
+        background: #dc3545 !important;
+    }
+    
+    .label-warning {
+        background: #ffc107 !important;
+        color: #212529 !important;
+    }
+    
+    .label-info {
+        background: #17a2b8 !important;
+    }
+    
+    .label-primary {
+        background: #667eea !important;
+    }
+    
+    /* Filter box */
+    .filter-box {
+        background: white !important;
+        border-radius: 8px !important;
+        padding: 20px !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    .filter-box h3 {
+        color: #333 !important;
+        font-size: 18px !important;
+        margin-bottom: 15px !important;
+    }
+    
+    /* Search box */
+    .search-input {
+        border: 1px solid #ddd !important;
+        border-radius: 4px !important;
+        padding: 10px !important;
+        font-size: 14px !important;
+        width: 100% !important;
+        margin-bottom: 15px !important;
+    }
+    
+    .search-input:focus {
+        border-color: #667eea !important;
+        outline: none !important;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25) !important;
+    }
+    
+    /* Action buttons in tables */
+    .btn-icon {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        margin: 0 2px !important;
+    }
+    
+    /* Breadcrumb */
+    .breadcrumb {
+        background: white !important;
+        border-radius: 4px !important;
+        padding: 10px 15px !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    }
+    
+    .breadcrumb > li + li:before {
+        content: "/" !important;
+        color: #6c757d !important;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .content {
+            padding: 10px !important;
+        }
+        
+        .panel-body {
+            padding: 15px !important;
+        }
+        
+        .table {
+            font-size: 12px !important;
+        }
+        
+        .btn {
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+        }
+        
+        .nav-sidebar {
+            margin-top: 0 !important;
+        }
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+    
+    /* Loading spinner */
+    .fa-spinner {
+        color: #667eea !important;
+    }
+    
+    /* Icons */
+    .icon {
+        color: #667eea !important;
+    }
+    
+    /* Links */
+    a {
+        color: #667eea !important;
+        transition: color 0.3s !important;
+    }
+    
+    a:hover {
+        color: #5568d3 !important;
+        text-decoration: none !important;
+    }
+    
+    /* Code blocks */
+    code {
+        background: #f4f4f4 !important;
+        padding: 2px 4px !important;
+        border-radius: 3px !important;
+        font-size: 11px !important;
+        color: #333 !important;
+    }
+    
+    pre {
+        background: #f4f4f4 !important;
+        padding: 10px !important;
+        border-radius: 4px !important;
+        overflow-x: auto !important;
+    }
+    
+    /* Well component */
+    .well {
+        background: #f8f9fa !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 4px !important;
+        padding: 15px !important;
+    }
+    
+    /* List groups */
+    .list-group-item {
+        border: 1px solid #e9ecef !important;
+        border-radius: 4px !important;
+        margin-bottom: 5px !important;
+    }
+    
+    .list-group-item:first-child {
+        border-radius: 4px !important;
+    }
+    
+    .list-group-item:last-child {
+        border-radius: 4px !important;
+    }
+    
+    /* Modal styling */
+    .modal-content {
+        border-radius: 8px !important;
+        border: none !important;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
+    }
+    
+    .modal-header {
+        background: #667eea !important;
+        color: white !important;
+        border-radius: 8px 8px 0 0 !important;
+        border: none !important;
+    }
+    
+    .modal-title {
+        color: white !important;
+    }
+    
+    .modal-body {
+        padding: 20px !important;
+    }
+    
+    .modal-footer {
+        border-top: 1px solid #e9ecef !important;
+        padding: 15px 20px !important;
+    }
+    
+    /* Tabs */
+    .nav-tabs {
+        border-bottom: 1px solid #e9ecef !important;
+    }
+    
+    .nav-tabs > li > a {
+        border: none !important;
+        color: #6c757d !important;
+        border-bottom: 2px solid transparent !important;
+        transition: all 0.3s !important;
+    }
+    
+    .nav-tabs > li > a:hover {
+        background: transparent !important;
+        color: #667eea !important;
+        border-bottom-color: #667eea !important;
+    }
+    
+    .nav-tabs > li.active > a {
+        color: #667eea !important;
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2px solid #667eea !important;
+    }
+    
+    .tab-content {
+        padding-top: 20px !important;
+    }
+    
+    /* Progress bars */
+    .progress {
+        background: #e9ecef !important;
+        border-radius: 4px !important;
+        height: 8px !important;
+    }
+    
+    .progress-bar {
+        background: #667eea !important;
+    }
+    
+    /* Tooltips */
+    .tooltip-inner {
+        background: #333 !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
+        font-size: 12px !important;
+    }
+    
+    /* Popovers */
+    .popover {
+        border: none !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    }
+    
+    .popover-title {
+        background: #667eea !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px 8px 0 0 !important;
+    }
+    
+    /* Recent activity sidebar styles */
+    .recent-activity-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 12px;
+    }
+    
+    .recent-activity-item:last-child {
+        border-bottom: none;
+    }
+    
+    .recent-activity-time {
+        color: #6c757d;
+        font-size: 11px;
+    }
+    
+    .recent-activity-action {
+        font-weight: 500;
+        margin-bottom: 2px;
+    }
+    
+    .recent-activity-details {
+        color: #495057;
+    }
+</style>
+
+<script>
+// Initialize tooltips and load recent activity for sidebar
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Load recent activity for sidebar
+    const sidebar = document.getElementById('recent-activity-sidebar');
+    if (sidebar) {
+        fetch('/admin/api/recent-activity')
+            .then(response => response.json())
+            .then(data => {
+                if (data.activity && data.activity.length > 0) {
+                    let html = '';
+                    data.activity.forEach(item => {
+                        const actionClass = item.action === 'CREATE' ? 'text-success' : 
+                                         item.action === 'DELETE' ? 'text-danger' : 'text-warning';
+                        html += `
+                            <div class="recent-activity-item">
+                                <div class="recent-activity-action ${actionClass}">
+                                    ${item.action} ${item.table_name}
+                                </div>
+                                <div class="recent-activity-details">
+                                    ID: ${item.record_id}
+                                </div>
+                                <div class="recent-activity-time">
+                                    ${new Date(item.timestamp).toLocaleString()}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    sidebar.innerHTML = html;
+                } else {
+                    sidebar.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">No recent activity</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading recent activity:', error);
+                sidebar.innerHTML = '<div style="text-align: center; padding: 20px; color: #dc3545;">Error loading activity</div>';
+            });
+    }
+});
+</script>
+{% endblock %}

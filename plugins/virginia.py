@@ -347,7 +347,7 @@ class VirginiaPlugin(BasePlugin):
         self.app.logger.info(f"Extracted {len(polling_places)} unique polling places")
 
         # Check which places need geocoding (new or address changed)
-        from app import PollingPlace
+        from models import PollingPlace
         places_to_geocode = []
         new_places = 0
         changed_places = 0

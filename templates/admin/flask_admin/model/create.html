@@ -1,0 +1,178 @@
+{% extends 'admin/flask_admin/base.html' %}
+
+{% block head %}
+    {{ super() }}
+    <title>{{ _gettext('Create New %(name)s', name=admin_view.name) }} - {{ admin_view.admin.name }}</title>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            {% block menu %}
+            <ul class="nav nav-sidebar">
+                {% for view in admin_view.admin.menu() %}
+                <li{% if view.is_active() %} class="active"{% endif %}>
+                    <a href="{{ view.url }}">{{ view.name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endblock %}
+        </div>
+        
+        <div class="col-md-10">
+            {% block messages %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% endblock %}
+            
+            {% block content %}
+            <!-- Breadcrumb Navigation -->
+            <ol class="breadcrumb">
+                <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('records_dashboard.index') }}">Records</a></li>
+                <li><a href="{{ return_url }}">{{ admin_view.name }}</a></li>
+                <li class="active">{{ _gettext('Create New') }}</li>
+            </ol>
+            
+            <div class="panel">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h3 class="panel-title">
+                                {% if return_url %}
+                                <a href="{{ return_url }}" class="btn btn-secondary btn-sm" style="margin-right: 10px;">
+                                    <i class="fa fa-arrow-left"></i> {{ _gettext('Back') }}
+                                </a>
+                                {% endif %}
+                                {{ _gettext('Create New %(name)s', name=admin_view.name) }}
+                            </h3>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            {% block model_menu_bar %}
+                            {% endblock %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel-body">
+                    {% block create_form %}
+                    <form method="POST" action="{{ get_url('.create_view', url=return_url) }}" class="form-horizontal" enctype="multipart/form-data">
+                        {{ form.hidden_tag() if form.hidden_tag }}
+                        {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <h4>{{ _gettext('Error(s)') }}</h4>
+                            <ul>
+                                {% for field_name, field_errors in form.errors.items() %}
+                                {% for error in field_errors %}
+                                <li>{{ admin_view.get_form_field_label(field_name) }}: {{ error }}</li>
+                                {% endfor %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        
+                        {% for field in form %}
+                        {% if field.type in ('HiddenField', 'CSRFTokenField') %}
+                        {{ field }}
+                        {% else %}
+                        <div class="form-group{% if field.errors %} has-error{% endif %}">
+                            <label class="col-md-2 control-label">
+                                {{ field.label.text }}
+                                {% if field.name in ['latitude', 'longitude'] %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Enter coordinates in decimal degrees format (e.g., 40.7128 for latitude, -74.0060 for longitude)"></i>
+                                {% elif field.name == 'zip_code' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Enter 5-digit ZIP code or ZIP+4 format (e.g., 12345 or 12345-6789)"></i>
+                                {% elif field.name == 'polling_hours' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Format: '7:00 AM - 8:00 PM'. Include days if needed: 'Mon-Fri: 7:00 AM - 8:00 PM, Sat: 9:00 AM - 5:00 PM'"></i>
+                                {% elif field.name == 'source_plugin' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Name of the plugin that provided this data (e.g., 'virginia', 'ohio', 'dummy')"></i>
+                                {% elif field.name == 'registered_voters' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Total number of registered voters in this precinct"></i>
+                                {% elif field.name == 'current_polling_place_id' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="ID of the current polling place assigned to this precinct"></i>
+                                {% elif field.name == 'precinctcode' %}
+                                <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px;" 
+                                   data-toggle="tooltip" data-placement="top" 
+                                   title="Official precinct code from state election authorities"></i>
+                                {% endif %}
+                            </label>
+                            <div class="col-md-10">
+                                {{ field(class='form-control') }}
+                                {% if field.description %}
+                                <p class="help-block">{{ field.description }}</p>
+                                {% endif %}
+                                {% if field.errors %}
+                                <p class="help-block">
+                                    {% for error in field.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                        
+                        <div class="form-group">
+                            <div class="col-md-offset-2 col-md-10">
+                                <input type="submit" value="{{ _gettext('Save') }}" class="btn btn-primary">
+                                {% if return_url %}
+                                <a href="{{ return_url }}" class="btn btn-secondary">{{ _gettext('Cancel') }}</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </form>
+                    {% endblock %}
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+</div>
+
+<style>
+.form-horizontal .control-label {
+    text-align: right;
+}
+
+.form-horizontal .form-group {
+    margin-bottom: 20px;
+}
+
+.form-horizontal .help-block {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #737373;
+}
+
+.has-error .form-control {
+    border-color: #dc3545;
+}
+
+.has-error .control-label {
+    color: #dc3545;
+}
+
+.has-error .help-block {
+    color: #dc3545;
+}
+</style>
+{% endblock %}

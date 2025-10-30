@@ -1,0 +1,64 @@
+{% extends 'admin/flask_admin/base.html' %}
+
+{% block head %}
+    {{ super() }}
+    <title>{{ admin_view.admin.name }} - {{ admin_view.name }}</title>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            {% block access_control %}
+            {% endblock %}
+            
+            {% block menu %}
+            <ul class="nav nav-sidebar">
+                {% for view in admin_view.admin.menu() %}
+                <li{% if view.is_active() %} class="active"{% endif %}>
+                    <a href="{{ view.url }}">{{ view.name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            
+            <!-- Recent Activity Sidebar -->
+            {% if admin_view and admin_view.name != 'Records Dashboard' %}
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                <h4 style="margin: 0 0 15px 0; font-size: 14px; font-weight: 600; color: #333;">Recent Activity</h4>
+                <div id="recent-activity-sidebar">
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <i class="fa fa-spinner fa-spin"></i> Loading...
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% endblock %}
+        </div>
+        
+        <div class="col-md-10">
+            {% block messages %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% endblock %}
+            
+            {% block content %}
+            <div class="panel">
+                <div class="panel-heading">
+                    <h3 class="panel-title">{{ admin_view.name }}</h3>
+                </div>
+                <div class="panel-body">
+                    {% block content_content %}
+                    <p>Welcome to the {{ admin_view.name }} interface.</p>
+                    {% endblock %}
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}

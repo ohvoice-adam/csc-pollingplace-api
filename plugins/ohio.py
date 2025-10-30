@@ -264,13 +264,14 @@ class OhioPlugin(BasePlugin):
                     'city': city,
                     'state': 'OH',
                     'zip_code': zip_code,
+                    'county': county_name,
                 }
 
         places = list(polling_places.values())
         self.app.logger.info(f"Extracted {len(places)} unique polling places")
 
         # Check which places need geocoding (new or address changed)
-        from app import PollingPlace
+        from models import PollingPlace
         places_to_geocode = []
         
         for place in places:
@@ -349,6 +350,7 @@ class OhioPlugin(BasePlugin):
                     'city': city,
                     'state': 'OH',
                     'zip_code': zip_code,
+                    'county': county_name,
                 }
 
         # Now process precincts using the lookup dictionary

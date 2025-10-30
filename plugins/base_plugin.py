@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime, date, timedelta
 
 if TYPE_CHECKING:
-    from app import PollingPlace, Precinct, PrecinctAssignment
+    from models import PollingPlace, Precinct, PrecinctAssignment
 
 
 class BasePlugin(ABC):
@@ -258,7 +258,7 @@ class BasePlugin(ABC):
                 self.app.logger.info(f"Starting sync for plugin: {self.name}")
 
                 # Import here to avoid circular imports
-                from app import PollingPlace
+                from models import PollingPlace
 
                 # Fetch data from source
                 polling_places_data = self.fetch_polling_places()
@@ -408,7 +408,7 @@ class BasePlugin(ABC):
         """
         try:
             # Import here to avoid circular imports
-            from app import Precinct, PrecinctAssignment, PollingPlace
+            from models import Precinct, PrecinctAssignment, PollingPlace
 
             # Fetch precinct data from source
             precincts_data = self.fetch_precincts()

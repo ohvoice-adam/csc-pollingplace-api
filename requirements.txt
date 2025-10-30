@@ -28,3 +28,6 @@ requests==2.31.0
 # Data processing (for plugin Excel parsing)
 pandas==2.2.0
 openpyxl==3.1.2
+
+# Database administration
+Flask-Admin==1.6.1

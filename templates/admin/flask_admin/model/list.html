@@ -1,0 +1,283 @@
+{% extends 'admin/flask_admin/base.html' %}
+
+{% block head %}
+    {{ super() }}
+    <title>{{ admin_view.name }} - {{ admin_view.admin.name }}</title>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            {% block menu %}
+            <ul class="nav nav-sidebar">
+                {% for view in admin_view.admin.menu() %}
+                <li{% if view.is_active() %} class="active"{% endif %}>
+                    <a href="{{ view.url }}">{{ view.name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endblock %}
+        </div>
+        
+        <div class="col-md-10">
+            {% block messages %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% endblock %}
+            
+            {% block content %}
+            <!-- Breadcrumb Navigation -->
+            <ol class="breadcrumb">
+                <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('records_dashboard.index') }}">Records</a></li>
+                <li class="active">{{ admin_view.name }}</li>
+            </ol>
+            
+            <div class="panel">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h3 class="panel-title">{{ admin_view.name }}</h3>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            {% block model_menu_bar %}
+                            <div class="btn-group">
+                                {% if admin_view.can_create %}
+                                <a href="{{ get_url('.create_view', url=return_url) }}" class="btn btn-primary">
+                                    <i class="fa fa-plus"></i> {{ _gettext('Create New Record') }}
+                                </a>
+                                {% endif %}
+                                {% if admin_view.can_export %}
+                                {% if export_types|length > 1 %}
+                                <div class="btn-group">
+                                    <button class="btn btn-secondary dropdown-toggle" data-toggle="dropdown">
+                                        <i class="fa fa-download"></i> {{ _gettext('Export') }}
+                                        <span class="caret"></span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for export_type in export_types %}
+                                        <li><a href="{{ get_url('.export', export_type=export_type, **request.args) }}">{{ _gettext('Export as %(export_type)s', export_type=export_type) }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% else %}
+                                <a href="{{ get_url('.export', export_type=export_types[0], **request.args) }}" class="btn btn-secondary">
+                                    <i class="fa fa-download"></i> {{ _gettext('Export') }}
+                                </a>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                            {% endblock %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel-body">
+                    {% block model_list_table %}
+                    {% if filter_args %}
+                    <div class="filter-box">
+                        <h3>{{ _gettext('Filters') }}</h3>
+                        <form method="GET" action="{{ return_url }}" class="form-inline">
+                            {% for arg in filter_args %}
+                            <input type="hidden" name="{{ arg.name }}" value="{{ arg.value }}">
+                            {% endfor %}
+                            
+                            {% if filter %}
+                            <div class="row">
+                                {% for flt in filter %}
+                                <div class="col-md-3">
+                                    <div class="form-group">
+                                        {{ flt() }}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary">{{ _gettext('Apply') }}</button>
+                                <a href="{{ get_url('.index_view') }}" class="btn btn-secondary">{{ _gettext('Reset') }}</a>
+                            </div>
+                            {% endif %}
+                        </form>
+                    </div>
+                    {% endif %}
+                    
+                    {% if search_supported %}
+                    <form method="GET" action="{{ return_url }}" class="form-inline">
+                        {% if filter_args %}
+                        {% for arg in filter_args %}
+                        <input type="hidden" name="{{ arg.name }}" value="{{ arg.value }}">
+                        {% endfor %}
+                        {% endif %}
+                        <div class="form-group">
+                            <input type="text" name="search" value="{{ search }}" class="search-input" placeholder="{{ _gettext('Search') }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary">{{ _gettext('Search') }}</button>
+                        {% if search %}
+                        <a href="{{ get_url('.index_view', **{k: v for k, v in request.args.items() if k != 'search'}) }}" class="btn btn-secondary">{{ _gettext('Clear') }}</a>
+                        {% endif %}
+                    </form>
+                    {% endif %}
+                    
+                    {% if data %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered table-hover">
+                            <thead>
+                                <tr>
+                                    {% if actions %}
+                                    <th class="list-checkbox-column">
+                                        <input type="checkbox" name="rowtoggle" class="action-rowtoggle" />
+                                    </th>
+                                    {% endif %}
+{% for column, column_name in list_columns %}
+                                    <th>
+                                        {% if column in sort_columns %}
+                                        {% if sort_column == column %}
+                                            {% if sort_desc == 1 %}
+                                                <a href="{{ get_url('.index_view', sort=column, sort_desc=0, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                                    {{ column_name }} <i class="fa fa-sort-desc"></i>
+                                                </a>
+                                            {% else %}
+                                                <a href="{{ get_url('.index_view', sort=column, sort_desc=1, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                                    {{ column_name }} <i class="fa fa-sort-asc"></i>
+                                                </a>
+                                            {% endif %}
+                                        {% else %}
+                                        <a href="{{ get_url('.index_view', sort=column, sort_desc=0, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                            {{ column_name }} <i class="fa fa-sort"></i>
+                                        </a>
+                                        {% endif %}
+                                        {% else %}
+                                        {{ column_name }}
+                                        {% endif %}
+                                        
+                                        <!-- Add helpful tooltips for complex columns -->
+                                        {% if column == 'latitude' or column == 'longitude' %}
+                                        <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                           data-toggle="tooltip" data-placement="top" 
+                                           title="Geographic coordinates in decimal degrees"></i>
+                                        {% elif column == 'source_plugin' %}
+                                        <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                           data-toggle="tooltip" data-placement="top" 
+                                           title="Data source plugin name"></i>
+                                        {% elif column == 'registered_voters' %}
+                                        <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                           data-toggle="tooltip" data-placement="top" 
+                                           title="Total registered voters"></i>
+                                        {% elif column == 'changed_recently' %}
+                                        <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                           data-toggle="tooltip" data-placement="top" 
+                                           title="Changed in last 6 months"></i>
+                                        {% endif %}
+                                    </th>
+                                    {% endfor %}
+                                    {% if admin_view.can_edit or admin_view.can_delete %}
+                                    <th class="list-actions-column">{{ _gettext('Actions') }}</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in data %}
+                                <tr>
+                                    {% if actions %}
+                                    <td>
+                                        <input type="checkbox" name="rowid" class="action-checkbox" value="{{ get_pk_value(row) }}" />
+                                    </td>
+                                    {% endif %}
+                                    {% for column, column_name in list_columns %}
+                                    <td>{{ get_value(row, column) }}</td>
+                                    {% endfor %}
+                                    {% if admin_view.can_edit or admin_view.can_delete %}
+                                    <td class="list-actions-column">
+                                        {% block list_row_actions %}
+                                        {% if admin_view.can_edit %}
+                                        <a class="btn btn-sm btn-primary btn-icon" href="{{ get_url('.edit_view', id=get_pk_value(row), url=return_url) }}" title="{{ _gettext('Edit record') }}">
+                                            <i class="fa fa-edit"></i>
+                                        </a>
+                                        {% endif %}
+                                        {% if admin_view.can_delete %}
+                                        <form class="inline-form" method="POST" action="{{ get_url('.delete_view', id=get_pk_value(row)) }}">
+                                            <button class="btn btn-sm btn-danger btn-icon" onclick="return confirm('{{ _gettext('Are you sure you want to delete this record?') }}');" title="{{ _gettext('Delete record') }}">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        {% endblock %}
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% block list_pager %}
+                    {% if count %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            {{ _gettext('Showing %(start)s to %(end)s of %(count)s records', start=num_pages * page_size + 1, end=(num_pages + 1) * page_size if (num_pages + 1) * page_size < count else count, count=count) }}
+                        </div>
+                        <div class="col-md-6 text-right">
+                            {{ pager() }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endblock %}
+                    
+                    {% else %}
+                    <div class="text-center" style="padding: 40px;">
+                        <i class="fa fa-database" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                        <p style="color: #999;">{{ _gettext('There are no items in the table.') }}</p>
+                        {% if admin_view.can_create %}
+                        <a href="{{ get_url('.create_view', url=return_url) }}" class="btn btn-primary">{{ _gettext('Create New Record') }}</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endblock %}
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+</div>
+
+<style>
+.inline-form {
+    display: inline-block;
+    margin: 0;
+    padding: 0;
+}
+
+.inline-form button {
+    margin: 0;
+    padding: 6px 12px;
+}
+
+.list-checkbox-column {
+    width: 30px;
+    text-align: center;
+}
+
+.list-actions-column {
+    width: 120px;
+    text-align: center;
+}
+
+.table-responsive {
+    margin-top: 20px;
+}
+
+.action-rowtoggle {
+    margin: 0;
+}
+
+.action-checkbox {
+    margin: 0;
+}
+</style>
+{% endblock %}

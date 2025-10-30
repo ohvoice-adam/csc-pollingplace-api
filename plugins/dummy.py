@@ -182,7 +182,7 @@ class DummyPlugin(BasePlugin):
         On subsequent syncs, randomly reassigns ~10% of precincts to simulate changes.
         """
         # Import here to avoid circular imports
-        from app import Precinct, PollingPlace
+        from models import Precinct, PollingPlace
 
         # Check if we have existing precincts (to simulate changes)
         existing_precincts = self.db.session.query(Precinct).all()

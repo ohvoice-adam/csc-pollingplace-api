@@ -1,0 +1,135 @@
+{% extends "admin/master.html" %}
+
+{% block head %}
+    {{ super() }}
+    <style>
+        .bulk-edit-form {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .field-group {
+            margin-bottom: 15px;
+        }
+        .field-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .field-group input, .field-group select, .field-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .help-text {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .selected-count {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <div class="bulk-edit-form">
+        <h2>Bulk Edit Polling Places</h2>
+        
+        <div class="selected-count">
+            <strong>{{ ids|length }} polling places selected for editing</strong>
+        </div>
+        
+        <form method="POST" action="{{ url_for('pollingplace.action_view') }}">
+            <input type="hidden" name="action" value="apply_bulk_edit">
+            
+            <div class="field-group">
+                <label for="state">State:</label>
+                <select name="state" id="state">
+                    <option value="">-- Leave Unchanged --</option>
+                    <option value="AL">Alabama (AL)</option>
+                    <option value="AK">Alaska (AK)</option>
+                    <option value="AZ">Arizona (AZ)</option>
+                    <option value="AR">Arkansas (AR)</option>
+                    <option value="CA">California (CA)</option>
+                    <option value="CO">Colorado (CO)</option>
+                    <option value="CT">Connecticut (CT)</option>
+                    <option value="DE">Delaware (DE)</option>
+                    <option value="FL">Florida (FL)</option>
+                    <option value="GA">Georgia (GA)</option>
+                    <option value="HI">Hawaii (HI)</option>
+                    <option value="ID">Idaho (ID)</option>
+                    <option value="IL">Illinois (IL)</option>
+                    <option value="IN">Indiana (IN)</option>
+                    <option value="IA">Iowa (IA)</option>
+                    <option value="KS">Kansas (KS)</option>
+                    <option value="KY">Kentucky (KY)</option>
+                    <option value="LA">Louisiana (LA)</option>
+                    <option value="ME">Maine (ME)</option>
+                    <option value="MD">Maryland (MD)</option>
+                    <option value="MA">Massachusetts (MA)</option>
+                    <option value="MI">Michigan (MI)</option>
+                    <option value="MN">Minnesota (MN)</option>
+                    <option value="MS">Mississippi (MS)</option>
+                    <option value="MO">Missouri (MO)</option>
+                    <option value="MT">Montana (MT)</option>
+                    <option value="NE">Nebraska (NE)</option>
+                    <option value="NV">Nevada (NV)</option>
+                    <option value="NH">New Hampshire (NH)</option>
+                    <option value="NJ">New Jersey (NJ)</option>
+                    <option value="NM">New Mexico (NM)</option>
+                    <option value="NY">New York (NY)</option>
+                    <option value="NC">North Carolina (NC)</option>
+                    <option value="ND">North Dakota (ND)</option>
+                    <option value="OH">Ohio (OH)</option>
+                    <option value="OK">Oklahoma (OK)</option>
+                    <option value="OR">Oregon (OR)</option>
+                    <option value="PA">Pennsylvania (PA)</option>
+                    <option value="RI">Rhode Island (RI)</option>
+                    <option value="SC">South Carolina (SC)</option>
+                    <option value="SD">South Dakota (SD)</option>
+                    <option value="TN">Tennessee (TN)</option>
+                    <option value="TX">Texas (TX)</option>
+                    <option value="UT">Utah (UT)</option>
+                    <option value="VT">Vermont (VT)</option>
+                    <option value="VA">Virginia (VA)</option>
+                    <option value="WA">Washington (WA)</option>
+                    <option value="WV">West Virginia (WV)</option>
+                    <option value="WI">Wisconsin (WI)</option>
+                    <option value="WY">Wyoming (WY)</option>
+                </select>
+                <div class="help-text">Select a state to update all selected polling places</div>
+            </div>
+            
+            <div class="field-group">
+                <label for="county">County:</label>
+                <input type="text" name="county" id="county" placeholder="Leave blank to keep unchanged">
+                <div class="help-text">Enter county name to update all selected polling places</div>
+            </div>
+            
+            <div class="field-group">
+                <label for="source_plugin">Source Plugin:</label>
+                <input type="text" name="source_plugin" id="source_plugin" placeholder="Leave blank to keep unchanged">
+                <div class="help-text">Enter source plugin name to update all selected polling places</div>
+            </div>
+            
+            <div class="field-group">
+                <label for="polling_hours">Polling Hours:</label>
+                <textarea name="polling_hours" id="polling_hours" rows="3" placeholder="Leave blank to keep unchanged"></textarea>
+                <div class="help-text">Enter polling hours to update all selected polling places (e.g., "7:00 AM - 8:00 PM")</div>
+            </div>
+            
+            <div class="field-group">
+                <button type="submit" class="btn btn-primary">Apply Changes</button>
+                <a href="{{ url_for('pollingplace.index_view') }}" class="btn btn-default">Cancel</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

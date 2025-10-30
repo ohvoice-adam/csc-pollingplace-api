@@ -77,7 +77,9 @@ else:
 app.config['geocoder_priority'] = config['geocoder_priority']
 
 # Initialize extensions
-db = SQLAlchemy(app)
+from database import db
+from models import PollingPlace, APIKey, Precinct, PrecinctAssignment, Election, AdminUser, AuditTrail
+db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'admin_login'
@@ -122,53 +124,6 @@ from flask_login import UserMixin
 # Create tables
 with app.app_context():
     db.create_all()
-app = Flask(__name__)
-
-# Configure logging
-log_file = os.path.join(os.path.dirname(__file__), 'app.log')
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s in %(name)s: %(message)s')
-file_handler = logging.FileHandler(log_file)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s in %(name)s: %(message)s'))
-logging.getLogger().addHandler(file_handler)
-app.logger.setLevel(logging.INFO)
-
-# Configuration
-# Database setup - supports both SQLite and PostgreSQL/Cloud SQL
-db_type = os.getenv('DB_TYPE', 'sqlite').lower()
-
-if db_type == 'postgresql' or db_type == 'postgres':
-    # PostgreSQL configuration
-    db_user = os.getenv('DB_USER', 'postgres')
-    db_password = os.getenv('DB_PASSWORD', '')
-    db_host = os.getenv('DB_HOST', 'localhost')
-    db_port = os.getenv('DB_PORT', '5432')
-    db_name = os.getenv('DB_NAME', 'pollingplaces')
-    
-    # Check if using Cloud SQL Unix socket
-    if db_host.startswith('/cloudsql/'):
-        # Cloud SQL with Unix socket
-        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@/{db_name}?host={db_host}'
-    else:
-        # Standard PostgreSQL connection
-        app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
-else:
-    # Default to SQLite
-    sqlite_path = os.getenv('SQLITE_PATH', '/data/pollingplaces.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{sqlite_path}'
-
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JSON_SORT_KEYS'] = False
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
-
-# Initialize extensions
-CORS(app)
-db = SQLAlchemy(app)
-
-# Initialize login manager
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'admin_login'
 
 # Rate limiting helper functions
 def get_api_key_identifier():
@@ -218,328 +173,7 @@ scheduler.start()
 plugin_manager = None
 
 
-# Database models
-class PollingPlace(db.Model):
-    """
-    Polling place model based on VIP (Voting Information Project) specification.
-    Compatible with Google Civic Data API format.
-    """
-    __tablename__ = 'polling_places'
-
-    # Primary identifier
-    id = db.Column(db.String(255), primary_key=True)  # VIP uses string IDs
-
-    # Location name and address fields (VIP structured address)
-    name = db.Column(db.String(255), nullable=False)
-    location_name = db.Column(db.String(255))  # Specific location name within address
-    address_line1 = db.Column(db.String(255))
-    address_line2 = db.Column(db.String(255))
-    address_line3 = db.Column(db.String(255))
-    city = db.Column(db.String(100), nullable=False)
-    state = db.Column(db.String(2), nullable=False)
-    zip_code = db.Column(db.String(10), nullable=False)
-    county = db.Column(db.String(100))  # County information
-
-    # Coordinates (WGS 84 decimal degrees)
-    latitude = db.Column(db.Float)
-    longitude = db.Column(db.Float)
-
-    # VIP-specific fields
-    polling_hours = db.Column(db.String(255))  # e.g., "7:00 AM - 8:00 PM"
-    notes = db.Column(db.Text)  # Additional information, directions, etc.
-    voter_services = db.Column(db.String(500))  # Services available at this location
-    start_date = db.Column(db.Date)  # When this location becomes active
-    end_date = db.Column(db.Date)  # When this location stops being active
-
-    # Source tracking
-    source_state = db.Column(db.String(2))  # Which state plugin provided this data
-    source_plugin = db.Column(db.String(100))  # Which plugin provided this data
-
-    # Metadata
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-    updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
-
-    def to_dict(self):
-        """Convert model to standard dictionary format"""
-        return {
-            'id': self.id,
-            'name': self.name,
-            'location_name': self.location_name,
-            'address_line1': self.address_line1,
-            'address_line2': self.address_line2,
-            'address_line3': self.address_line3,
-            'city': self.city,
-            'state': self.state,
-            'zip_code': self.zip_code,
-            'county': self.county,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
-            'polling_hours': self.polling_hours,
-            'notes': self.notes,
-            'voter_services': self.voter_services,
-            'start_date': self.start_date.isoformat() if self.start_date else None,
-            'end_date': self.end_date.isoformat() if self.end_date else None,
-            'source_state': self.source_state,
-            'source_plugin': self.source_plugin,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-    def to_vip_format(self):
-        """
-        Convert model to VIP (Voting Information Project) format
-        Compatible with Google Civic Data API
-        """
-        address = {
-            'locationName': self.location_name,
-            'line1': self.address_line1,
-            'line2': self.address_line2,
-            'line3': self.address_line3,
-            'city': self.city,
-            'state': self.state,
-            'zip': self.zip_code
-        }
-
-        # Remove None values from address
-        address = {k: v for k, v in address.items() if v is not None}
-
-        vip_data = {
-            'id': self.id,
-            'name': self.name,
-            'address': address,
-            'pollingHours': self.polling_hours,
-            'notes': self.notes,
-        }
-
-        # Add optional fields if present
-        if self.county:
-            vip_data['county'] = self.county
-
-        if self.latitude is not None and self.longitude is not None:
-            vip_data['latitude'] = self.latitude
-            vip_data['longitude'] = self.longitude
-
-        if self.voter_services:
-            vip_data['voterServices'] = self.voter_services
-
-        if self.start_date:
-            vip_data['startDate'] = self.start_date.isoformat()
-
-        if self.end_date:
-            vip_data['endDate'] = self.end_date.isoformat()
-
-        # Remove None values
-        return {k: v for k, v in vip_data.items() if v is not None}
-
-
-class APIKey(db.Model):
-    """
-    API Key model for authentication
-    """
-    __tablename__ = 'api_keys'
-
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    name = db.Column(db.String(255), nullable=False)  # Description/owner of the key
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-    last_used_at = db.Column(db.DateTime)
-
-    # Rate limit overrides (optional, uses defaults if None)
-    rate_limit_per_day = db.Column(db.Integer)
-    rate_limit_per_hour = db.Column(db.Integer)
-
-    @staticmethod
-    def generate_key():
-        """Generate a new API key"""
-        return secrets.token_urlsafe(48)
-
-    def to_dict(self):
-        """Convert model to dictionary"""
-        return {
-            'id': self.id,
-            'key': self.key,
-            'name': self.name,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
-            'rate_limit_per_day': self.rate_limit_per_day,
-            'rate_limit_per_hour': self.rate_limit_per_hour,
-        }
-
-
-class Precinct(db.Model):
-    """
-    Voting precinct model.
-    Represents a voting precinct and tracks its current polling place assignment.
-    """
-    __tablename__ = 'precincts'
-
-    # Primary identifier
-    id = db.Column(db.String(255), primary_key=True)  # e.g., "CA-ALAMEDA-0001"
-
-    # Precinct information
-    name = db.Column(db.String(255), nullable=False)
-    state = db.Column(db.String(2), nullable=False, index=True)
-    county = db.Column(db.String(100))
-    precinctcode = db.Column(db.String(50))  # Official precinct code from state data
-    registered_voters = db.Column(db.Integer)
-
-    # Current assignment tracking
-    current_polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'))
-    last_change_date = db.Column(db.Date)
-    changed_recently = db.Column(db.Boolean, default=False)  # Changed in last 6 months
-
-    # Source tracking
-    source_plugin = db.Column(db.String(100))
-
-    # Metadata
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-    updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
-
-    # Relationships
-    current_polling_place = db.relationship('PollingPlace', foreign_keys=[current_polling_place_id], backref='current_precincts')
-    assignments = db.relationship('PrecinctAssignment', back_populates='precinct', order_by='PrecinctAssignment.assigned_date.desc()')
-
-    def to_dict(self):
-        """Convert model to dictionary"""
-        return {
-            'id': self.id,
-            'name': self.name,
-            'state': self.state,
-            'county': self.county,
-            'precinctcode': self.precinctcode,
-            'registered_voters': self.registered_voters,
-            'current_polling_place_id': self.current_polling_place_id,
-            'last_change_date': self.last_change_date.isoformat() if self.last_change_date else None,
-            'changed_recently': self.changed_recently,
-            'source_plugin': self.source_plugin,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-    def to_dict_with_history(self):
-        """Convert model to dictionary with assignment history"""
-        data = self.to_dict()
-        data['assignment_history'] = [assignment.to_dict() for assignment in self.assignments]
-        if self.current_polling_place:
-            data['current_polling_place'] = self.current_polling_place.to_dict()
-        return data
-
-
-class PrecinctAssignment(db.Model):
-    """
-    Historical tracking of precinct-to-polling-place assignments.
-    Each record represents a time period when a precinct was assigned to a specific polling place.
-    """
-    __tablename__ = 'precinct_assignments'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    # Assignment details
-    precinct_id = db.Column(db.String(255), db.ForeignKey('precincts.id'), nullable=False, index=True)
-    polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'), nullable=False)
-    election_id = db.Column(db.Integer, db.ForeignKey('elections.id'), index=True)  # Optional link to election
-
-    # Time range
-    assigned_date = db.Column(db.Date, nullable=False)
-    removed_date = db.Column(db.Date)  # NULL means current assignment
-
-    # Change tracking
-    previous_polling_place_id = db.Column(db.String(255), db.ForeignKey('polling_places.id'))
-
-    # Metadata
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-
-    # Relationships
-    precinct = db.relationship('Precinct', back_populates='assignments')
-    polling_place = db.relationship('PollingPlace', foreign_keys=[polling_place_id])
-    previous_polling_place = db.relationship('PollingPlace', foreign_keys=[previous_polling_place_id])
-    election = db.relationship('Election', back_populates='assignments')
-
-    def to_dict(self):
-        """Convert model to dictionary"""
-        result = {
-            'id': self.id,
-            'precinct_id': self.precinct_id,
-            'polling_place_id': self.polling_place_id,
-            'assigned_date': self.assigned_date.isoformat() if self.assigned_date else None,
-            'removed_date': self.removed_date.isoformat() if self.removed_date else None,
-            'previous_polling_place_id': self.previous_polling_place_id,
-            'is_current': self.removed_date is None,
-            'election_id': self.election_id,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-        }
-
-        # Include election details if available
-        if self.election:
-            result['election'] = {
-                'id': self.election.id,
-                'date': self.election.date.isoformat() if self.election.date else None,
-                'name': self.election.name,
-                'state': self.election.state
-            }
-
-        return result
-
-
-class Election(db.Model):
-    """
-    Election model for tracking elections and their polling place configurations.
-    Each election represents a specific voting event with a date and name.
-    """
-    __tablename__ = 'elections'
-
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, nullable=False, index=True)
-    name = db.Column(db.String(255), nullable=False)  # e.g., "2024 General Election"
-    state = db.Column(db.String(2), nullable=False, index=True)
-
-    # Metadata
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-
-    # Relationships
-    assignments = db.relationship('PrecinctAssignment', back_populates='election')
-
-    # Unique constraint on date + state
-    __table_args__ = (db.UniqueConstraint('date', 'state', name='unique_election_date_state'),)
-
-    def to_dict(self):
-        """Convert model to dictionary"""
-        return {
-            'id': self.id,
-            'date': self.date.isoformat() if self.date else None,
-            'name': self.name,
-            'state': self.state,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-        }
-
-
-class AdminUser(UserMixin, db.Model):
-    """
-    Admin user model for web interface authentication
-    """
-    __tablename__ = 'admin_users'
-
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-    last_login_at = db.Column(db.DateTime)
-
-    def set_password(self, password):
-        """Hash and set password"""
-        self.password_hash = bcrypt.hashpw(
-            password.encode('utf-8'),
-            bcrypt.gensalt()
-        ).decode('utf-8')
-
-    def check_password(self, password):
-        """Check if password matches hash"""
-        return bcrypt.checkpw(
-            password.encode('utf-8'),
-            self.password_hash.encode('utf-8')
-        )
+# Models are imported from models.py
 
 
 @login_manager.user_loader
@@ -1098,9 +732,101 @@ def admin_logout():
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    """Admin dashboard - manage API keys"""
+    """Admin dashboard - manage API keys and show record statistics"""
+    # Get API keys
     api_keys = APIKey.query.order_by(APIKey.created_at.desc()).all()
-    return render_template('admin/dashboard.html', api_keys=api_keys)
+    
+    # Get record statistics
+    from sqlalchemy import text
+    
+    try:
+        # Get counts for each model (excluding dummy data)
+        polling_places_count = PollingPlace.query.filter(PollingPlace.source_plugin != 'dummy').count()
+        precincts_count = Precinct.query.filter(Precinct.source_plugin != 'dummy').count()
+        elections_count = Election.query.count()
+        assignments_count = PrecinctAssignment.query.count()
+        
+        # Get additional statistics
+        active_api_keys = APIKey.query.filter_by(is_active=True).count()
+        precincts_with_polling_places = Precinct.query.filter(
+            Precinct.current_polling_place_id.isnot(None),
+            Precinct.source_plugin != 'dummy'
+        ).count()
+        recent_elections = Election.query.filter(Election.date >= datetime.now().date()).count()
+        
+        # Get recent activity from audit trail
+        recent_activity = []
+        try:
+            from models import AuditTrail
+            recent_audit = AuditTrail.query.order_by(AuditTrail.timestamp.desc()).limit(10).all()
+            for activity in recent_audit:
+                recent_activity.append({
+                    'table_name': activity.table_name,
+                    'action': activity.action,
+                    'record_id': activity.record_id,
+                    'timestamp': activity.timestamp,
+                    'username': activity.user.username if activity.user else 'System'
+                })
+        except:
+            recent_activity = []
+        
+        # Get recently edited records (based on updated_at, excluding dummy data)
+        recent_polling_places = PollingPlace.query.filter(
+            PollingPlace.source_plugin != 'dummy'
+        ).order_by(PollingPlace.updated_at.desc()).limit(5).all()
+        recent_precincts = Precinct.query.filter(
+            Precinct.source_plugin != 'dummy'
+        ).order_by(Precinct.updated_at.desc()).limit(5).all()
+        
+        # Get state distribution (excluding dummy data)
+        states_data = db.session.execute(text("""
+            SELECT state, COUNT(*) as count 
+            FROM polling_places 
+            WHERE state IS NOT NULL AND source_plugin != 'dummy'
+            GROUP BY state 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)).fetchall()
+        
+        # Get county distribution (top 10, excluding dummy data)
+        counties_data = db.session.execute(text("""
+            SELECT county, COUNT(*) as count 
+            FROM polling_places 
+            WHERE county IS NOT NULL AND source_plugin != 'dummy'
+            GROUP BY county 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)).fetchall()
+        
+    except Exception as e:
+        # Fallback values if database queries fail
+        polling_places_count = 0
+        precincts_count = 0
+        elections_count = 0
+        assignments_count = 0
+        active_api_keys = 0
+        precincts_with_polling_places = 0
+        recent_elections = 0
+        recent_activity = []
+        recent_polling_places = []
+        recent_precincts = []
+        states_data = []
+        counties_data = []
+    
+    return render_template('admin/dashboard.html', 
+                         api_keys=api_keys,
+                         polling_places_count=polling_places_count,
+                         precincts_count=precincts_count,
+                         elections_count=elections_count,
+                         assignments_count=assignments_count,
+                         active_api_keys=active_api_keys,
+                         precincts_with_polling_places=precincts_with_polling_places,
+                         recent_elections=recent_elections,
+                         recent_activity=recent_activity,
+                         recent_polling_places=recent_polling_places,
+                         recent_precincts=recent_precincts,
+                         states_data=states_data,
+                         counties_data=counties_data)
 
 
 @app.route('/admin/keys/create', methods=['POST'])
@@ -1348,6 +1074,137 @@ def admin_geocoding_config():
     return render_template('admin/geocoding_config.html', priority=','.join(config['geocoder_priority']))
 
 
+@app.route('/admin/api/recent-activity')
+@login_required
+def admin_api_recent_activity():
+    """API endpoint for recent activity sidebar"""
+    try:
+        from models import AuditTrail
+        recent_audit = AuditTrail.query.order_by(AuditTrail.timestamp.desc()).limit(8).all()
+        
+        activity = []
+        for audit in recent_audit:
+            activity.append({
+                'table_name': audit.table_name,
+                'action': audit.action,
+                'record_id': audit.record_id,
+                'timestamp': audit.timestamp.isoformat() if audit.timestamp else None,
+                'username': audit.user.username if audit.user else 'System'
+            })
+        
+        return jsonify({'activity': activity})
+    except Exception as e:
+        return jsonify({'error': str(e), 'activity': []})
+
+
+@app.route('/admin/map')
+@login_required
+def admin_map():
+    """Map page showing polling places filterable by county"""
+    return render_template('admin/map.html')
+
+
+@app.route('/admin/api/polling-places-map')
+@login_required
+def admin_api_polling_places_map():
+    """API endpoint for polling places data for the map"""
+    try:
+        # Get query parameters
+        state_filter = request.args.get('state')
+        county_filter = request.args.get('county')
+        dataset = request.args.get('dataset', '').lower()
+        
+        # Default to showing all states if none specified
+        query = PollingPlace.query.filter(
+            PollingPlace.latitude.isnot(None),
+            PollingPlace.longitude.isnot(None)
+        )
+        
+        # Filter by state if provided
+        if state_filter:
+            query = query.filter_by(state=state_filter.upper())
+        
+        # Filter by county if provided
+        if county_filter:
+            query = query.filter_by(county=county_filter)
+        
+        # Filter by dataset if provided
+        if dataset == 'dummy':
+            query = query.filter_by(source_plugin='dummy')
+        else:
+            # Exclude dummy data by default
+            query = query.filter(PollingPlace.source_plugin != 'dummy')
+        
+        polling_places = query.all()
+        
+        # Convert to GeoJSON format
+        features = []
+        for pp in polling_places:
+            if pp.latitude and pp.longitude:
+                features.append({
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [pp.longitude, pp.latitude]
+                    },
+                    "properties": {
+                        "id": pp.id,
+                        "name": pp.name,
+                        "address": f"{pp.address_line1 or ''}, {pp.city or ''}, {pp.state or ''} {pp.zip_code or ''}".strip(', '),
+                        "county": pp.county,
+                        "city": pp.city,
+                        "state": pp.state,
+                        "zip_code": pp.zip_code,
+                        "polling_hours": pp.polling_hours,
+                        "notes": pp.notes,
+                        "voter_services": pp.voter_services
+                    }
+                })
+        
+        return jsonify({
+            "type": "FeatureCollection",
+            "features": features
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), "type": "FeatureCollection", "features": []})
+
+
+@app.route('/admin/api/counties')
+@login_required
+def admin_api_counties():
+    """API endpoint to get list of counties for filtering"""
+    try:
+        state_filter = request.args.get('state')
+        dataset = request.args.get('dataset', '').lower()
+        
+        query = db.session.query(PollingPlace.county).filter(
+            PollingPlace.county.isnot(None),
+            PollingPlace.county != ''
+        )
+        
+        # Filter by state if provided
+        if state_filter:
+            query = query.filter_by(state=state_filter.upper())
+        
+        # Filter by dataset if provided
+        if dataset == 'dummy':
+            query = query.filter_by(source_plugin='dummy')
+        else:
+            # Exclude dummy data by default
+            query = query.filter(PollingPlace.source_plugin != 'dummy')
+        
+        counties = query.distinct().order_by(PollingPlace.county).all()
+        
+        return jsonify({
+            'counties': [county[0] for county in counties if county[0]]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'counties': []})
+
+
+
+
+
 @app.route('/admin/geocoding-api-config', methods=['GET', 'POST'])
 @login_required
 def admin_geocoding_api_config():
@@ -1430,6 +1287,14 @@ with app.app_context():
 
     # Initialize plugin manager after models are defined
     plugin_manager = PluginManager(app, db)
+    
+    # Initialize Flask-Admin after models are defined
+    try:
+        from admin_config import init_admin
+        admin = init_admin(app, db)
+    except ImportError as e:
+        app.logger.warning(f"Flask-Admin not available: {e}")
+        admin = None
 
     # Set up automated scheduling if enabled
     auto_sync_enabled = os.getenv('AUTO_SYNC_ENABLED', 'False').lower() == 'true'
