@@ -66,6 +66,31 @@ class VirginiaPlugin(BasePlugin):
         # Fallback: use sanitized name
         return re.sub(r'[^A-Z0-9]', '', str(precinct_name).upper())[:10]
 
+    def _infer_location_type(self, name: str) -> str:
+        """
+        Infer location type from polling place name.
+        
+        Args:
+            name: The polling place name
+            
+        Returns:
+            Location type: "drop box", "election day", or "early voting"
+        """
+        name_lower = name.lower()
+        
+        # Check for drop box indicators
+        drop_box_keywords = ['drop box', 'ballot drop', 'dropbox', 'ballot box']
+        if any(keyword in name_lower for keyword in drop_box_keywords):
+            return 'drop box'
+        
+        # Check for early voting indicators
+        early_voting_keywords = ['early voting', 'early vote', 'advance voting', 'early in-person']
+        if any(keyword in name_lower for keyword in early_voting_keywords):
+            return 'early voting'
+        
+        # Default to election day
+        return 'election day'
+
     def _download_excel(self, url: str) -> pd.DataFrame:
         """Download and parse Excel file from URL."""
         self.app.logger.info(f"Downloading Excel file from: {url}")
@@ -121,6 +146,7 @@ class VirginiaPlugin(BasePlugin):
                         'city': city,
                         'state': 'VA',
                         'zip_code': zip_code,
+                        'location_type': self._infer_location_type(location),
                     }
 
                 polling_place_id = polling_places[polling_place_key]['id']

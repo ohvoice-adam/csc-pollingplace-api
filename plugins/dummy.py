@@ -96,10 +96,16 @@ class DummyPlugin(BasePlugin):
         end_hour = random.choice([19, 20, 21])
         return f"{start_hour}:00 AM - {end_hour % 12 or 12}:00 PM"
 
+    def generate_fake_location_type(self) -> str:
+        """Generate a fake location type with realistic distribution"""
+        # Most polling places are election day locations
+        weights = [0.05, 0.15, 0.80]  # drop box, early voting, election day
+        return random.choices(['drop box', 'early voting', 'election day'], weights=weights)[0]
+
     def generate_fake_location(self, state_code: str, location_id: int) -> Dict[str, Any]:
         """Generate a single fake polling location"""
-        location_type = random.choice(self.LOCATION_TYPES)
-        location_name = f"{random.choice(['North', 'South', 'East', 'West', 'Central'])} {location_type}"
+        location_type_name = random.choice(self.LOCATION_TYPES)
+        location_name = f"{random.choice(['North', 'South', 'East', 'West', 'Central'])} {location_type_name}"
         city = self.generate_fake_city()
         address = self.generate_fake_address()
         lat, lng = self.generate_fake_coordinates()
@@ -120,6 +126,7 @@ class DummyPlugin(BasePlugin):
             'latitude': lat,
             'longitude': lng,
             'polling_hours': self.generate_fake_polling_hours(),
+            'location_type': self.generate_fake_location_type(),
         }
 
         # Add optional fields randomly

@@ -43,6 +43,31 @@ class OhioPlugin(BasePlugin):
             reader = csv.DictReader(f)
             return list(reader)
 
+    def _infer_location_type(self, name: str) -> str:
+        """
+        Infer location type from polling place name.
+        
+        Args:
+            name: The polling place name
+            
+        Returns:
+            Location type: "drop box", "election day", or "early voting"
+        """
+        name_lower = name.lower()
+        
+        # Check for drop box indicators
+        drop_box_keywords = ['drop box', 'ballot drop', 'dropbox', 'ballot box']
+        if any(keyword in name_lower for keyword in drop_box_keywords):
+            return 'drop box'
+        
+        # Check for early voting indicators
+        early_voting_keywords = ['early voting', 'early vote', 'advance voting', 'early in-person']
+        if any(keyword in name_lower for keyword in early_voting_keywords):
+            return 'early voting'
+        
+        # Default to election day
+        return 'election day'
+
     def _geocode_addresses(self, polling_places: List[Dict[str, Any]]) -> None:
         """
         Geocode the polling places using multiple APIs: Census, Google, Mapbox.
@@ -265,6 +290,7 @@ class OhioPlugin(BasePlugin):
                     'state': 'OH',
                     'zip_code': zip_code,
                     'county': county_name,
+                    'location_type': self._infer_location_type(name),
                 }
 
         places = list(polling_places.values())
@@ -351,6 +377,7 @@ class OhioPlugin(BasePlugin):
                     'state': 'OH',
                     'zip_code': zip_code,
                     'county': county_name,
+                    'location_type': self._infer_location_type(name),
                 }
 
         # Now process precincts using the lookup dictionary

@@ -686,6 +686,127 @@ def get_election_precincts(election_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/polling-places/bulk-delete', methods=['POST'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def bulk_delete_polling_places():
+    """
+    Bulk delete polling places with filtering options
+    Requires confirmation for safety
+    
+    Request body:
+    {
+        "filters": {
+            "state": "OH",           // optional: filter by state code
+            "start_date": "2024-01-01",  // optional: filter by start_date (>=)
+            "end_date": "2024-12-31",    // optional: filter by end_date (<=)
+            "created_after": "2024-01-01", // optional: filter by created_at (>=)
+            "created_before": "2024-12-31", // optional: filter by created_at (<=)
+            "source_plugin": "ohio"   // optional: filter by source plugin
+        },
+        "dry_run": true,             // optional: if true, only return count without deleting
+        "confirm": "DELETE"          // required: must be exactly "DELETE" to confirm
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body required'}), 400
+        
+        filters = data.get('filters', {})
+        dry_run = data.get('dry_run', False)
+        confirm = data.get('confirm')
+        
+        # Build query
+        query = PollingPlace.query
+        
+        # Apply filters
+        if 'state' in filters and filters['state']:
+            query = query.filter(PollingPlace.state == filters['state'])
+        
+        if 'start_date' in filters and filters['start_date']:
+            try:
+                start_date = datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
+                query = query.filter(PollingPlace.start_date >= start_date)
+            except ValueError:
+                return jsonify({'error': 'Invalid start_date format. Use YYYY-MM-DD'}), 400
+        
+        if 'end_date' in filters and filters['end_date']:
+            try:
+                end_date = datetime.strptime(filters['end_date'], '%Y-%m-%d').date()
+                query = query.filter(PollingPlace.end_date <= end_date)
+            except ValueError:
+                return jsonify({'error': 'Invalid end_date format. Use YYYY-MM-DD'}), 400
+        
+        if 'created_after' in filters and filters['created_after']:
+            try:
+                created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
+                query = query.filter(PollingPlace.created_at >= created_after)
+            except ValueError:
+                return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
+        
+        if 'created_before' in filters and filters['created_before']:
+            try:
+                created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
+                query = query.filter(PollingPlace.created_at <= created_before)
+            except ValueError:
+                return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
+        
+        if 'source_plugin' in filters and filters['source_plugin']:
+            query = query.filter(PollingPlace.source_plugin == filters['source_plugin'])
+        
+        # Get count of records that would be affected
+        count = query.count()
+        
+        if count == 0:
+            return jsonify({
+                'message': 'No polling places match the specified filters',
+                'count': 0,
+                'dry_run': dry_run
+            }), 200
+        
+        # Safety check: require explicit confirmation for actual deletion
+        if not dry_run:
+            if confirm != 'DELETE':
+                return jsonify({
+                    'error': 'Confirmation required. Set "confirm": "DELETE" to proceed with deletion',
+                    'count': count,
+                    'dry_run': False
+                }), 400
+            
+
+        
+        # Perform deletion or dry run
+        if dry_run:
+            return jsonify({
+                'message': 'Dry run completed. No records were deleted.',
+                'count': count,
+                'dry_run': True,
+                'filters': filters
+            }), 200
+        else:
+            # Get IDs for logging
+            polling_place_ids = [pp.id for pp in query.all()]
+            
+            # Delete the records
+            deleted_count = query.delete()
+            db.session.commit()
+            
+            app.logger.warning(f"Bulk delete performed by API key: {deleted_count} polling places deleted. IDs: {polling_place_ids[:10]}{'...' if len(polling_place_ids) > 10 else ''}")
+            
+            return jsonify({
+                'message': f'Successfully deleted {deleted_count} polling places',
+                'count': deleted_count,
+                'dry_run': False,
+                'filters': filters
+            }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error in bulk delete: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 # Admin Web Interface Routes
 @app.route('/admin')
 @app.route('/admin/')
@@ -827,6 +948,13 @@ def admin_dashboard():
                          recent_precincts=recent_precincts,
                          states_data=states_data,
                          counties_data=counties_data)
+
+
+@app.route('/admin/bulk-delete-pollingplaces')
+@login_required
+def admin_bulk_delete_pollingplaces():
+    """Bulk delete polling places interface"""
+    return render_template('admin/bulk_delete_pollingplaces.html')
 
 
 @app.route('/admin/keys/create', methods=['POST'])

@@ -2,10 +2,27 @@ from datetime import datetime
 import json
 import secrets
 import bcrypt
+from enum import Enum
 
 # Import db from the shared database module to avoid multiple instances
 from database import db
 from flask_login import UserMixin
+
+
+class LocationType(Enum):
+    """Enumeration for polling place location types"""
+    DROP_BOX = "drop box"
+    ELECTION_DAY = "election day"
+    EARLY_VOTING = "early voting"
+
+
+# Association table for many-to-many relationship between precincts and polling places
+precinct_polling_places = db.Table('precinct_polling_places',
+    db.Column('precinct_id', db.String(255), db.ForeignKey('precincts.id'), primary_key=True),
+    db.Column('polling_place_id', db.String(255), db.ForeignKey('polling_places.id'), primary_key=True),
+    db.Column('created_at', db.DateTime, server_default=db.func.now())
+)
+
 
 class PollingPlace(db.Model):
     """
@@ -38,6 +55,9 @@ class PollingPlace(db.Model):
     voter_services = db.Column(db.String(500))  # Services available at this location
     start_date = db.Column(db.Date)  # When this location becomes active
     end_date = db.Column(db.Date)  # When this location stops being active
+    
+    # Location type classification
+    location_type = db.Column(db.String(20), nullable=False, default='election day')
 
     # Source tracking
     source_state = db.Column(db.String(2))  # Which state plugin provided this data
@@ -67,6 +87,7 @@ class PollingPlace(db.Model):
             'voter_services': self.voter_services,
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'end_date': self.end_date.isoformat() if self.end_date else None,
+            'location_type': self.location_type,
             'source_state': self.source_state,
             'source_plugin': self.source_plugin,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -97,6 +118,7 @@ class PollingPlace(db.Model):
             'address': address,
             'pollingHours': self.polling_hours,
             'notes': self.notes,
+            'locationType': self.location_type.value if self.location_type else None,
         }
 
         # Add optional fields if present
@@ -187,6 +209,7 @@ class Precinct(db.Model):
 
     # Relationships
     current_polling_place = db.relationship('PollingPlace', foreign_keys=[current_polling_place_id], backref='current_precincts')
+    polling_places = db.relationship('PollingPlace', secondary=precinct_polling_places, backref='precincts')
     assignments = db.relationship('PrecinctAssignment', back_populates='precinct', order_by='PrecinctAssignment.assigned_date.desc()')
 
     def to_dict(self):
@@ -199,6 +222,7 @@ class Precinct(db.Model):
             'precinctcode': self.precinctcode,
             'registered_voters': self.registered_voters,
             'current_polling_place_id': self.current_polling_place_id,
+            'polling_place_ids': [pp.id for pp in self.polling_places],
             'last_change_date': self.last_change_date.isoformat() if self.last_change_date else None,
             'changed_recently': self.changed_recently,
             'source_plugin': self.source_plugin,
@@ -212,6 +236,7 @@ class Precinct(db.Model):
         data['assignment_history'] = [assignment.to_dict() for assignment in self.assignments]
         if self.current_polling_place:
             data['current_polling_place'] = self.current_polling_place.to_dict()
+        data['polling_places'] = [pp.to_dict() for pp in self.polling_places]
         return data
 
 

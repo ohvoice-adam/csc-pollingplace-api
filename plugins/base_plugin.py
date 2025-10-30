@@ -86,6 +86,7 @@ class BasePlugin(ABC):
             - voter_services: str (optional) - Services available
             - start_date: str (optional) - ISO format date (YYYY-MM-DD)
             - end_date: str (optional) - ISO format date (YYYY-MM-DD)
+            - location_type: str (optional) - Location type: "drop box", "election day", or "early voting"
 
         Raises:
             Exception: If there's an error fetching data
@@ -269,9 +270,17 @@ class BasePlugin(ABC):
 
                 for data in polling_places_data:
                     try:
+                        # Validate data first
+                        if not self.validate_polling_place_data(data):
+                            errors += 1
+                            continue
+
                         # Add source tracking
                         data['source_state'] = self.state_code
                         data['source_plugin'] = self.name
+
+                        # Set default location_type if not provided
+                        self.set_default_location_type(data)
 
                         # Generate composite key as ID if not provided
                         if 'id' not in data or not data['id']:
@@ -569,4 +578,28 @@ class BasePlugin(ABC):
                 )
                 return False
 
+        # Validate location_type if provided
+        if 'location_type' in data and data['location_type']:
+            valid_types = ['drop box', 'election day', 'early voting']
+            if data['location_type'] not in valid_types:
+                self.app.logger.warning(
+                    f"Invalid location_type '{data['location_type']}'. "
+                    f"Valid types: {valid_types}"
+                )
+                return False
+
         return True
+
+    def set_default_location_type(self, data: Dict[str, Any]) -> None:
+        """
+        Set default location_type if not provided.
+
+        Args:
+            data: Dictionary with polling place data (modified in place)
+        """
+        if 'location_type' not in data or not data['location_type']:
+            # Default to 'election day' for most polling places
+            data['location_type'] = 'election day'
+            self.app.logger.debug(
+                f"Set default location_type to 'election day' for {data.get('name', 'unknown')}"
+            )
