@@ -183,10 +183,10 @@
         <header>
             <h1>Admin Dashboard</h1>
             <div class="header-actions">
-                <a href="{{ url_for('admin_map')}" class="btn btn-primary">View Map</a>
-                <a href="{{ url_for('db_dashboard.index')}" class="btn btn-primary">Edit Records</a>
-                <a href="{{ url_for('admin_logs')}" class="btn btn-secondary">View Logs</a>
-                <a href="{{ url_for('admin_change_password')}" class="btn btn-secondary">Change Password</a>
+                <a href="{{ url_for('admin_map') }}" class="btn btn-primary">View Map</a>
+                <a href="{{ url_for('db_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
+                <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">View Logs</a>
+                <a href="{{ url_for('admin_change_password') }}" class="btn btn-secondary">Change Password</a>
                 <a href="{{ url_for('admin_logout')}" class="btn btn-secondary">Logout</a>
             </div>
         </header>
@@ -239,16 +239,16 @@
         <div class="card">
             <h2>Quick Actions</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
-                <a href="{{ url_for('db_dashboard.index')}" class="btn btn-primary">Edit Records</a>
-                <a href="{{ url_for('admin_plugins')}" class="btn btn-primary">Manage Plugins</a>
-                <a href="{{ url_for('admin_logs')}" class="btn btn-primary">View Logs</a>
-                <a href="{{ url_for('admin_docs')}" class="btn btn-primary">📚 Documentation</a>
-                <a href="{{ url_for('admin_geocoding_config')}" class="btn btn-primary">Geocoding Priority</a>
-                <a href="{{ url_for('admin_geocoding_api_config')}" class="btn btn-primary">Geocoding API Keys</a>
-                <a href="{{ url_for('admin_bulk_delete_records')}" class="btn btn-danger">
+                <a href="{{ url_for('db_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
+                <a href="{{ url_for('admin_plugins') }}" class="btn btn-primary">Manage Plugins</a>
+                <a href="{{ url_for('admin_logs') }}" class="btn btn-primary">View Logs</a>
+                <a href="{{ url_for('admin_docs') }}" class="btn btn-primary">📚 Documentation</a>
+                <a href="{{ url_for('admin_geocoding_config') }}" class="btn btn-primary">Geocoding Priority</a>
+                <a href="{{ url_for('admin_geocoding_api_config') }}" class="btn btn-primary">Geocoding API Keys</a>
+                <a href="{{ url_for('admin_bulk_delete_records') }}" class="btn btn-danger">
                     <i class="bi bi-trash3"></i> Bulk Delete
                 </a>
-                <a href="{{ url_for('admin_change_password')}" class="btn btn-primary">Change Password</a>
+                <a href="{{ url_for('admin_change_password') }}" class="btn btn-primary">Change Password</a>
             </div>
         </div>
 
@@ -382,7 +382,7 @@
 
         <div class="card">
             <h2>Create New API Key</h2>
-            <form method="POST" action="{{ url_for('admin_create_key')}">
+            <form method="POST" action="{{ url_for('admin_create_key') }}">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="name">Key Name / Description *</label>
@@ -441,11 +441,11 @@
                             <td>
                                 <div class="actions">
                                     {% if key.is_active %}
-                                        <form method="POST" action="{{ url_for('admin_revoke_key', key_id=key.id)}" style="display: inline;">
+                                        <form method="POST" action="{{ url_for('admin_revoke_key', key_id=key.id) }}" style="display: inline;">
                                             <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Revoke this API key?')">Revoke</button>
                                         </form>
                                     {% else %}
-                                        <form method="POST" action="{{ url_for('admin_activate_key', key_id=key.id)}" style="display: inline;">
+                                        <form method="POST" action="{{ url_for('admin_activate_key', key_id=key.id) }}" style="display: inline;">
                                             <button type="submit" class="btn btn-success btn-small">Activate</button>
                                         </form>
                                     {% endif %}
