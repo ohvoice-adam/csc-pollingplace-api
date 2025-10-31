@@ -1,0 +1,109 @@
+{% extends "admin/flask_admin/base.html" %}
+
+{% block head %}
+    {{ super() }}
+    <style>
+        .navbar {
+            background: #667eea !important;
+            padding: 0 20px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        }
+        .navbar-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            height: 60px;
+        }
+        .navbar-brand {
+            color: white !important;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .navbar-nav {
+            display: flex;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            gap: 20px;
+        }
+        .navbar-nav li a {
+            color: rgba(255,255,255,0.8) !important;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .navbar-nav li a:hover,
+        .navbar-nav li a.active {
+            background-color: rgba(255,255,255,0.1) !important;
+            color: white !important;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-size: 14px;
+            border-top: 1px solid #dee2e6;
+            margin-top: 40px;
+        }
+        @media (max-width: 768px) {
+            .navbar-content {
+                flex-direction: column;
+                height: auto;
+                padding: 10px 0;
+            }
+            .navbar-nav {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .container {
+                padding: 10px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block brand %}
+    <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+        🗳️ CSC Polling Place API
+    </a>
+{% endblock %}
+
+{% block menu_links %}
+    <ul class="navbar-nav">
+        <li><a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}class="active"{% endif %}>Dashboard</a></li>
+        <li><a href="{{ url_for('db_dashboard.index') }}" {% if 'db' in request.endpoint %}class="active"{% endif %}>Database</a></li>
+        <li><a href="{{ url_for('admin_map') }}" {% if request.endpoint == 'admin_map' %}class="active"{% endif %}>Map</a></li>
+        <li><a href="{{ url_for('admin_plugins') }}" {% if 'plugin' in request.endpoint %}class="active"{% endif %}>Plugins</a></li>
+        <li><a href="{{ url_for('admin_docs') }}" {% if request.endpoint == 'admin_docs' %}class="active"{% endif %}>📚 Docs</a></li>
+        <li><a href="{{ url_for('admin_logs') }}" {% if request.endpoint == 'admin_logs' %}class="active"{% endif %}>Logs</a></li>
+        <li><a href="{{ url_for('admin_change_password') }}" {% if request.endpoint == 'admin_change_password' %}class="active"{% endif %}>Settings</a></li>
+        <li><a href="{{ url_for('admin_logout') }}">Logout</a></li>
+    </ul>
+{% endblock %}
+
+{% block page_content %}
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2024 CSC Polling Place API. Admin interface for managing polling place data.</p>
+    </footer>
+{% endblock %}
