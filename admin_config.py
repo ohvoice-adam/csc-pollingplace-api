@@ -268,7 +268,7 @@ class PrecinctView(SecureModelView):
     
     def _current_polling_place_formatter(self, context, model, name):
         if model.current_polling_place:
-            return Markup(f'<a href="/admin/pollingplace/edit/?id={model.current_polling_place.id}">{model.current_polling_place.name}</a>')
+            return Markup(f'<a href="/admin/db/pollingplace/edit/?id={model.current_polling_place.id}">{model.current_polling_place.name}</a>')
         return '<span class="text-muted">Not assigned</span>'
     
     column_formatters = {
@@ -501,17 +501,17 @@ class PrecinctAssignmentView(SecureModelView):
     
     def _precinct_formatter(self, context, model, name):
         if model.precinct:
-            return Markup(f'<a href="/admin/precinct/edit/?id={model.precinct.id}">{model.precinct.name}</a>')
+            return Markup(f'<a href="/admin/db/precinct/edit/?id={model.precinct.id}">{model.precinct.name}</a>')
         return '<span class="text-muted">Not specified</span>'
     
     def _polling_place_formatter(self, context, model, name):
         if model.polling_place:
-            return Markup(f'<a href="/admin/pollingplace/edit/?id={model.polling_place.id}">{model.polling_place.name}</a>')
+            return Markup(f'<a href="/admin/db/pollingplace/edit/?id={model.polling_place.id}">{model.polling_place.name}</a>')
         return '<span class="text-muted">Not specified</span>'
     
     def _election_formatter(self, context, model, name):
         if model.election:
-            return Markup(f'<a href="/admin/election/edit/?id={model.election.id}">{model.election.name}</a>')
+            return Markup(f'<a href="/admin/db/election/edit/?id={model.election.id}">{model.election.name}</a>')
         return '<span class="text-muted">Not specified</span>'
     
     column_formatters = {
