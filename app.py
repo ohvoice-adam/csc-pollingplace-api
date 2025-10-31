@@ -111,8 +111,8 @@ def timezone_filter(timestamp):
     eastern_time = timestamp - timedelta(hours=4)
     return eastern_time.strftime('%Y-%m-%d %H:%M:%S')
 
-# Initialize plugin manager
-plugin_manager = PluginManager(app, db)
+# Initialize plugin manager (will be done after models are defined)
+plugin_manager = None
 
 # Initialize scheduler
 scheduler = BackgroundScheduler()
@@ -168,10 +168,6 @@ limiter = Limiter(
 # Initialize scheduler
 scheduler = BackgroundScheduler()
 scheduler.start()
-
-# Initialize plugin manager (will be done after models are defined)
-plugin_manager = None
-
 
 # Models are imported from models.py
 
@@ -1311,6 +1307,208 @@ def plugin_docs(plugin_name, doc_type):
         content = f.read()
 
     return render_template('admin/plugin_docs.html', plugin_name=plugin_name, doc_type=doc_type, content=content)
+
+
+@app.route('/admin/virginia-sync')
+@login_required
+def admin_virginia_sync():
+    """Virginia plugin sync interface"""
+    try:
+        # Get Virginia plugin instance
+        virginia_plugin = plugin_manager.get_plugin('virginia')
+        if not virginia_plugin:
+            flash('Virginia plugin not found', 'error')
+            return redirect(url_for('admin_plugins'))
+        
+        # Get available elections
+        elections = virginia_plugin.get_available_elections()
+        
+        return render_template('admin/virginia_sync.html', elections=elections)
+        
+    except Exception as e:
+        flash(f'Error loading Virginia sync interface: {str(e)}', 'error')
+        return redirect(url_for('admin_plugins'))
+
+
+@app.route('/admin/virginia-sync', methods=['POST'])
+@login_required
+def admin_virginia_sync_post():
+    """Handle Virginia plugin sync requests"""
+    try:
+        # Get Virginia plugin instance
+        virginia_plugin = plugin_manager.get_plugin('virginia')
+        if not virginia_plugin:
+            return jsonify({'success': False, 'error': 'Virginia plugin not found'}), 404
+        
+        # Parse form data
+        selected_files = request.form.getlist('selected_files')
+        custom_dates = request.form.getlist('custom_dates')
+        
+        if not selected_files:
+            return jsonify({'success': False, 'error': 'No files selected'}), 400
+        
+        # Validate custom dates
+        date_mapping = {}
+        for i, file_url in enumerate(selected_files):
+            custom_date = custom_dates[i] if i < len(custom_dates) else ''
+            if custom_date:
+                try:
+                    # Validate date format
+                    datetime.strptime(custom_date, '%Y-%m-%d')
+                    date_mapping[file_url] = custom_date
+                except ValueError:
+                    return jsonify({'success': False, 'error': f'Invalid date format for {file_url}: {custom_date}'}), 400
+        
+        # Record sync start time
+        sync_start_time = datetime.utcnow()
+        
+        # Process each selected file
+        results = []
+        total_pp_added = total_pp_updated = total_p_added = total_p_updated = 0
+        
+        for file_url in selected_files:
+            try:
+                # Get election info for this file
+                elections = virginia_plugin.get_available_elections()
+                election_info = next((e for e in elections if e['url'] == file_url), None)
+                
+                if not election_info:
+                    results.append({
+                        'file_url': file_url,
+                        'success': False,
+                        'error': 'Election info not found'
+                    })
+                    continue
+                
+                # Use custom date if provided, otherwise use detected date
+                election_date = date_mapping.get(file_url, election_info['election_date'])
+                
+                # Create election record if needed
+                from models import Election
+                election = Election.query.filter_by(
+                    date=datetime.strptime(election_date, '%Y-%m-%d').date(),
+                    state='VA'
+                ).first()
+                
+                if not election:
+                    election = Election(
+                        date=datetime.strptime(election_date, '%Y-%m-%d').date(),
+                        name=election_info['election_name'],
+                        state='VA'
+                    )
+                    db.session.add(election)
+                    db.session.commit()
+                
+                # Sync polling places for this file
+                polling_places = virginia_plugin.fetch_polling_places(file_url)
+                sync_result = virginia_plugin.sync()
+                
+                # Sync precincts with election date
+                precincts = virginia_plugin.fetch_precincts(file_url)
+                precinct_result = virginia_plugin.sync_precincts(
+                    effective_date=datetime.strptime(election_date, '%Y-%m-%d').date(),
+                    election_id=election.id
+                )
+                
+                # Aggregate statistics
+                total_pp_added += sync_result['polling_places']['added']
+                total_pp_updated += sync_result['polling_places']['updated']
+                total_p_added += precinct_result['added']
+                total_p_updated += precinct_result['updated']
+                
+                results.append({
+                    'file_url': file_url,
+                    'election_name': election_info['election_name'],
+                    'success': True,
+                    'polling_places': sync_result['polling_places'],
+                    'precincts': precinct_result
+                })
+                
+            except Exception as e:
+                results.append({
+                    'file_url': file_url,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        # Calculate duration
+        sync_end_time = datetime.utcnow()
+        duration = sync_end_time - sync_start_time
+        duration_str = str(duration).split('.')[0]  # Remove microseconds
+        
+        # Store sync history
+        try:
+            from models import AuditTrail
+            audit_entry = AuditTrail(
+                table_name='virginia_sync',
+                record_id=f"sync_{sync_start_time.strftime('%Y%m%d_%H%M%S')}",
+                action='CREATE',
+                new_values=json.dumps({
+                    'files_processed': len(selected_files),
+                    'files_successful': len([r for r in results if r['success']]),
+                    'files_failed': len([r for r in results if not r['success']]),
+                    'polling_places_added': total_pp_added,
+                    'polling_places_updated': total_pp_updated,
+                    'precincts_added': total_p_added,
+                    'precincts_updated': total_p_updated,
+                    'duration': duration_str,
+                    'success': len([r for r in results if r['success']]) == len(selected_files)
+                }),
+                user_id=current_user.id if current_user.is_authenticated else None,
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent', '')
+            )
+            db.session.add(audit_entry)
+            db.session.commit()
+        except Exception as e:
+            app.logger.warning(f"Failed to store sync history: {e}")
+        
+        return jsonify({'success': True, 'results': results})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/admin/api/virginia-sync-history')
+@login_required
+def admin_api_virginia_sync_history():
+    """Get Virginia sync history from audit trail"""
+    try:
+        from models import AuditTrail
+        
+        # Get recent Virginia sync operations from audit trail
+        history = db.session.query(AuditTrail).filter(
+            AuditTrail.table_name == 'virginia_sync',
+            AuditTrail.action == 'CREATE'
+        ).order_by(AuditTrail.timestamp.desc()).limit(20).all()
+        
+        history_data = []
+        for entry in history:
+            try:
+                if entry.new_values:
+                    data = json.loads(entry.new_values)
+                    history_data.append({
+                        'timestamp': entry.timestamp.isoformat() if entry.timestamp else None,
+                        'files_processed': data.get('files_processed', 0),
+                        'files_successful': data.get('files_successful', 0),
+                        'files_failed': data.get('files_failed', 0),
+                        'polling_places_added': data.get('polling_places_added', 0),
+                        'polling_places_updated': data.get('polling_places_updated', 0),
+                        'precincts_added': data.get('precincts_added', 0),
+                        'precincts_updated': data.get('precincts_updated', 0),
+                        'duration': data.get('duration', 'N/A'),
+                        'success': data.get('success', False),
+                        'username': entry.get_username()
+                    })
+            except Exception as e:
+                app.logger.warning(f"Error parsing audit entry: {e}")
+                continue
+        
+        return jsonify({'history': history_data})
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching sync history: {e}")
+        return jsonify({'error': str(e), 'history': []})
 
 
 @app.route('/admin/logs')

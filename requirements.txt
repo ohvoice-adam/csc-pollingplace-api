@@ -29,5 +29,8 @@ requests==2.31.0
 pandas==2.2.0
 openpyxl==3.1.2
 
+# Web scraping (for Virginia plugin)
+beautifulsoup4==4.12.3
+
 # Database administration
 Flask-Admin==1.6.1

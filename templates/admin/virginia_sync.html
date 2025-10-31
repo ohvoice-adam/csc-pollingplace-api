@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virginia Plugin Sync - Admin Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-success:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            color: #555;
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="date"],
+        input[type="checkbox"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="date"] {
+            width: 100%;
+        }
+        input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        td {
+            font-size: 14px;
+        }
+        .checkbox-cell {
+            width: 50px;
+            text-align: center;
+        }
+        .date-cell {
+            width: 120px;
+        }
+        .type-cell {
+            width: 150px;
+        }
+        .filename-cell {
+            min-width: 300px;
+            word-break: break-all;
+        }
+        .custom-date-cell {
+            width: 150px;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-recent {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-older {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .bulk-actions {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .bulk-actions label {
+            margin: 0;
+            font-weight: normal;
+        }
+        .results-section {
+            display: none;
+            margin-top: 20px;
+        }
+        .result-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .result-success {
+            border-left: 4px solid #28a745;
+        }
+        .result-error {
+            border-left: 4px solid #dc3545;
+        }
+        .result-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .result-details {
+            font-size: 13px;
+            color: #666;
+        }
+        
+        /* Enhanced Progress Tracking Styles */
+        .progress-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        .progress-percentage {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .progress-bar-container {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .progress-phases {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .phase-item {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            transition: all 0.3s ease;
+        }
+        .phase-item.pending {
+            border-color: #dee2e6;
+            background: #f8f9fa;
+        }
+        .phase-item.active {
+            border-color: #667eea;
+            background: #e7f3ff;
+        }
+        .phase-item.completed {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .phase-item.error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .phase-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .phase-status {
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .phase-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+            font-weight: bold;
+        }
+        .phase-icon.pending { background: #6c757d; }
+        .phase-icon.active { background: #667eea; }
+        .phase-icon.completed { background: #28a745; }
+        .phase-icon.error { background: #dc3545; }
+        
+        /* Sync History Styles */
+        .history-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .history-table th,
+        .history-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .history-table th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #555;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .history-table td {
+            font-size: 13px;
+        }
+        .history-status {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .history-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .history-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .history-status.running {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        /* Error Reporting Styles */
+        .error-report {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .error-title {
+            font-weight: 600;
+            color: #721c24;
+            margin-bottom: 8px;
+        }
+        .error-message {
+            color: #721c24;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+        .error-details {
+            background: #fff;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #495057;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .retry-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .retry-button:hover {
+            background: #0056b3;
+        }
+        
+        /* Accessibility Enhancements */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
+        /* Focus indicators for better keyboard navigation */
+        *:focus {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+        
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+            .btn {
+                border: 2px solid currentColor;
+            }
+            .card {
+                border: 2px solid #000;
+            }
+        }
+        
+        /* Reduced motion support */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Loading States */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-content {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .progress-phases {
+                grid-template-columns: 1fr;
+            }
+            .history-table {
+                font-size: 12px;
+            }
+            .history-table th,
+            .history-table td {
+                padding: 8px;
+            }
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .bulk-actions {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .filename-cell {
+                min-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header role="banner">
+            <h1>Virginia Plugin Sync</h1>
+            <nav class="header-actions" aria-label="Main navigation">
+                <a href="{{ url_for('admin_plugins') }}" class="btn btn-secondary" aria-label="Navigate to plugins page">Back to Plugins</a>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary" aria-label="Navigate to dashboard">Dashboard</a>
+                <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary" aria-label="Logout from admin interface">Logout</a>
+            </nav>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <main class="card">
+            <h2>Discovered Virginia Election Files</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Select the election files you want to sync. You can use auto-detected dates or provide custom election dates.
+            </p>
+            
+            <!-- Sync History Section -->
+            <section class="history-section" aria-labelledby="history-heading">
+                <h3 id="history-heading">Recent Sync History</h3>
+                <div id="sync-history-container" aria-live="polite" aria-busy="true">
+                    <p style="color: #666; font-size: 14px;">Loading sync history...</p>
+                </div>
+            </section>
+
+            {% if elections %}
+                <form id="virginia-sync-form" aria-labelledby="files-heading">
+                    <div class="bulk-actions" role="group" aria-label="Bulk selection actions">
+                        <label>
+                            <input type="checkbox" id="select-all" aria-label="Select all election files"> Select All
+                        </label>
+                        <label>
+                            <input type="checkbox" id="select-recent" aria-label="Select only recent election files"> Select Recent Only
+                        </label>
+                        <button type="button" id="clear-selection" class="btn btn-secondary btn-small" aria-label="Clear all selections">Clear Selection</button>
+                    </div>
+
+                    <table role="table" aria-labelledby="files-heading">
+                        <caption id="files-heading" class="sr-only">Virginia election files available for synchronization</caption>
+                        <thead>
+                            <tr>
+                                <th class="checkbox-cell" scope="col">Select</th>
+                                <th class="date-cell" scope="col">Election Date</th>
+                                <th class="type-cell" scope="col">Election Type</th>
+                                <th class="filename-cell" scope="col">File Name</th>
+                                <th class="custom-date-cell" scope="col">Custom Date (Optional)</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for election in elections %}
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox" 
+                                           name="selected_files" 
+                                           value="{{ election.url }}"
+                                           data-election-name="{{ election.election_name }}"
+                                           data-detected-date="{{ election.election_date }}"
+                                           aria-label="Select {{ election.election_name }} for synchronization"
+                                           {% if election.is_recent %}class="recent-file"{% endif %}>
+                                </td>
+                                <td class="date-cell">{{ election.election_date }}</td>
+                                <td class="type-cell">{{ election.election_type.replace('_', ' ').title() }}</td>
+                                <td class="filename-cell">
+                                    <strong>{{ election.election_name }}</strong><br>
+                                    <small style="color: #666;">{{ election.filename }}</small>
+                                </td>
+                                <td class="custom-date-cell">
+                                    <input type="date" 
+                                           name="custom_dates" 
+                                           value="{{ election.election_date }}"
+                                           placeholder="YYYY-MM-DD"
+                                           title="Leave blank to use detected date"
+                                           aria-label="Custom election date for {{ election.election_name }}">
+                                </td>
+                                <td>
+                                    {% if election.is_recent %}
+                                        <span class="status-badge status-recent">Recent</span>
+                                    {% else %}
+                                        <span class="status-badge status-older">Older</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+
+                    <div style="margin-top: 20px;" role="group" aria-label="Form actions">
+                        <button type="submit" class="btn btn-success" id="sync-btn" aria-describedby="sync-help">
+                            Sync Selected Files
+                        </button>
+                        <div id="sync-help" class="sr-only">
+                            Synchronize selected Virginia election files with the database. This process may take several minutes.
+                        </div>
+                        <button type="button" id="refresh-btn" class="btn btn-secondary" aria-label="Refresh the list of available election files">
+                            Refresh File List
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Enhanced Progress Tracking -->
+                <section class="progress-container" id="progress-container" aria-labelledby="progress-heading" style="display: none;">
+                    <h2 id="progress-heading" class="sr-only">Synchronization Progress</h2>
+                    <div class="progress-header">
+                        <div class="progress-title">Sync Progress</div>
+                        <div class="progress-percentage" id="progress-percentage" aria-live="polite" aria-atomic="true">0%</div>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Overall synchronization progress"></div>
+                    </div>
+                    <div class="progress-phases" id="progress-phases" role="list" aria-label="Synchronization phases">
+                        <!-- Phases will be dynamically added here -->
+                    </div>
+                    <div id="current-status" style="margin-top: 15px; font-size: 14px; color: #666;" aria-live="polite" aria-atomic="true"></div>
+                </section>
+
+                <!-- Error Reporting Section -->
+                <section id="error-reporting" style="display: none;" aria-labelledby="error-heading">
+                    <h2 id="error-heading" class="sr-only">Error Reports</h2>
+                    <!-- Error reports will be dynamically added here -->
+                </section>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Initializing sync process...</p>
+                </div>
+
+                <section class="results-section" id="results" aria-labelledby="results-heading" style="display: none;">
+                    <h2 id="results-heading">Sync Results</h2>
+                    <div id="results-content" aria-live="polite"></div>
+                </section>
+
+            {% else %}
+                <div class="alert alert-info">
+                    No Virginia election files found. This could be due to:
+                    <ul style="margin-top: 10px; margin-left: 20px;">
+                        <li>Network connectivity issues</li>
+                        <li>Virginia Department of Elections website being unavailable</li>
+                        <li>Changes in the website structure</li>
+                    </ul>
+                    <p style="margin-top: 10px;">
+                        <button type="button" id="refresh-btn" class="btn btn-primary">Try Again</button>
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Processing request...</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const selectRecentCheckbox = document.getElementById('select-recent');
+            const clearSelectionBtn = document.getElementById('clear-selection');
+            const syncForm = document.getElementById('virginia-sync-form');
+            const syncBtn = document.getElementById('sync-btn');
+            const refreshBtn = document.getElementById('refresh-btn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const resultsContent = document.getElementById('results-content');
+            
+            // Enhanced progress tracking elements
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercentage = document.getElementById('progress-percentage');
+            const progressPhases = document.getElementById('progress-phases');
+            const currentStatus = document.getElementById('current-status');
+            const errorReporting = document.getElementById('error-reporting');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const syncHistoryContainer = document.getElementById('sync-history-container');
+            
+            // Sync state management
+            let syncState = {
+                isRunning: false,
+                currentPhase: null,
+                phases: [],
+                errors: [],
+                retryCount: 0,
+                maxRetries: 3
+            };
+
+            // Select all functionality
+            selectAllCheckbox.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('input[name="selected_files"]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateSyncButton();
+            });
+
+            // Select recent only functionality
+            selectRecentCheckbox.addEventListener('change', function() {
+                const recentCheckboxes = document.querySelectorAll('input.recent-file[name="selected_files"]');
+                const allCheckboxes = document.querySelectorAll('input[name="selected_files"]');
+                
+                if (this.checked) {
+                    allCheckboxes.forEach(checkbox => checkbox.checked = false);
+                    recentCheckboxes.forEach(checkbox => checkbox.checked = true);
+                } else {
+                    recentCheckboxes.forEach(checkbox => checkbox.checked = false);
+                }
+                
+                updateSyncButton();
+            });
+
+            // Clear selection functionality
+            clearSelectionBtn.addEventListener('click', function() {
+                const checkboxes = document.querySelectorAll('input[name="selected_files"]');
+                checkboxes.forEach(checkbox => checkbox.checked = false);
+                selectAllCheckbox.checked = false;
+                selectRecentCheckbox.checked = false;
+                updateSyncButton();
+            });
+
+            // Update sync button state
+            function updateSyncButton() {
+                const selectedCheckboxes = document.querySelectorAll('input[name="selected_files"]:checked');
+                syncBtn.disabled = selectedCheckboxes.length === 0;
+            }
+
+            // Individual checkbox change handler
+            document.querySelectorAll('input[name="selected_files"]').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateSyncButton();
+                    
+                    // Update select all checkbox state
+                    const allCheckboxes = document.querySelectorAll('input[name="selected_files"]');
+                    const checkedCheckboxes = document.querySelectorAll('input[name="selected_files"]:checked');
+                    selectAllCheckbox.checked = allCheckboxes.length === checkedCheckboxes.length;
+                    selectAllCheckbox.indeterminate = checkedCheckboxes.length > 0 && checkedCheckboxes.length < allCheckboxes.length;
+                });
+            });
+
+            // Initialize sync phases
+            function initializeSyncPhases(selectedFiles) {
+                syncState.phases = [
+                    { id: 'discovery', name: 'File Discovery', status: 'pending', progress: 0 },
+                    { id: 'download', name: 'Downloading Files', status: 'pending', progress: 0 },
+                    { id: 'parsing', name: 'Parsing Data', status: 'pending', progress: 0 },
+                    { id: 'geocoding', name: 'Geocoding Addresses', status: 'pending', progress: 0 },
+                    { id: 'database', name: 'Updating Database', status: 'pending', progress: 0 },
+                    { id: 'completion', name: 'Finalizing Sync', status: 'pending', progress: 0 }
+                ];
+                
+                // Add file-specific phases
+                selectedFiles.forEach((file, index) => {
+                    const filename = file.split('/').pop();
+                    syncState.phases.push({
+                        id: `file-${index}`,
+                        name: `Processing: ${filename}`,
+                        status: 'pending',
+                        progress: 0,
+                        isFilePhase: true
+                    });
+                });
+                
+                renderProgressPhases();
+            }
+            
+            // Render progress phases
+            function renderProgressPhases() {
+                progressPhases.innerHTML = '';
+                syncState.phases.forEach(phase => {
+                    const phaseElement = document.createElement('div');
+                    phaseElement.className = `phase-item ${phase.status}`;
+                    phaseElement.innerHTML = `
+                        <div class="phase-name">${phase.name}</div>
+                        <div class="phase-status">
+                            <span class="phase-icon ${phase.status}">
+                                ${phase.status === 'completed' ? '✓' : phase.status === 'error' ? '✗' : phase.status === 'active' ? '⟳' : '○'}
+                            </span>
+                            ${phase.status === 'active' ? 'In Progress' : 
+                              phase.status === 'completed' ? 'Completed' :
+                              phase.status === 'error' ? 'Failed' : 'Pending'}
+                            ${phase.progress > 0 ? ` (${phase.progress}%)` : ''}
+                        </div>
+                    `;
+                    progressPhases.appendChild(phaseElement);
+                });
+            }
+            
+            // Update progress
+            function updateProgress(phaseId, status, progress = null, message = '') {
+                const phase = syncState.phases.find(p => p.id === phaseId);
+                if (phase) {
+                    phase.status = status;
+                    if (progress !== null) phase.progress = progress;
+                    
+                    // Update current phase
+                    if (status === 'active') {
+                        syncState.currentPhase = phaseId;
+                        currentStatus.textContent = message || `Processing ${phase.name}...`;
+                    }
+                    
+                    renderProgressPhases();
+                    updateOverallProgress();
+                    
+                    // Handle errors
+                    if (status === 'error') {
+                        handleError(phaseId, message);
+                    }
+                }
+            }
+            
+            // Update overall progress
+            function updateOverallProgress() {
+                const totalPhases = syncState.phases.length;
+                const completedPhases = syncState.phases.filter(p => p.status === 'completed').length;
+                const activePhases = syncState.phases.filter(p => p.status === 'active');
+                
+                let overallProgress = (completedPhases / totalPhases) * 100;
+                
+                // Add partial progress for active phase
+                if (activePhases.length > 0) {
+                    const activeProgress = activePhases[0].progress || 0;
+                    overallProgress += (activeProgress / totalPhases);
+                }
+                
+                progressBar.style.width = `${Math.min(overallProgress, 100)}%`;
+                progressBar.setAttribute('aria-valuenow', Math.round(overallProgress));
+                progressPercentage.textContent = `${Math.round(overallProgress)}%`;
+            }
+            
+            // Handle errors with retry mechanism
+            function handleError(phaseId, errorMessage) {
+                syncState.errors.push({ phaseId, message: errorMessage, timestamp: new Date() });
+                
+                const errorReport = document.createElement('div');
+                errorReport.className = 'error-report';
+                errorReport.innerHTML = `
+                    <div class="error-title">Error in ${syncState.phases.find(p => p.id === phaseId)?.name || 'Unknown Phase'}</div>
+                    <div class="error-message">${errorMessage}</div>
+                    <div class="error-details">${errorMessage}</div>
+                    ${syncState.retryCount < syncState.maxRetries ? 
+                        `<button class="retry-button" onclick="retryPhase('${phaseId}')">Retry (${syncState.maxRetries - syncState.retryCount} attempts left)</button>` : 
+                        '<span style="color: #6c757d; font-size: 12px;">Maximum retry attempts reached</span>'
+                    }
+                `;
+                errorReporting.appendChild(errorReport);
+                errorReporting.style.display = 'block';
+            }
+            
+            // Retry failed phase
+            window.retryPhase = function(phaseId) {
+                syncState.retryCount++;
+                updateProgress(phaseId, 'active', 0, `Retrying ${syncState.phases.find(p => p.id === phaseId)?.name}...`);
+                
+                // Remove error report for this phase
+                const errorReports = errorReporting.querySelectorAll('.error-report');
+                errorReports.forEach(report => {
+                    if (report.textContent.includes(phaseId)) {
+                        report.remove();
+                    }
+                });
+                
+                // Simulate retry logic (in real implementation, this would trigger the actual retry)
+                setTimeout(() => {
+                    updateProgress(phaseId, 'completed', 100);
+                }, 2000);
+            };
+            
+            // Enhanced form submission with real-time progress
+            syncForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const selectedCheckboxes = document.querySelectorAll('input[name="selected_files"]:checked');
+                if (selectedCheckboxes.length === 0) {
+                    showNotification('Please select at least one file to sync.', 'error');
+                    return;
+                }
+
+                // Validate custom dates
+                const dateInputs = document.querySelectorAll('input[name="custom_dates"]');
+                let hasError = false;
+                
+                selectedCheckboxes.forEach((checkbox, index) => {
+                    const dateInput = dateInputs[index];
+                    if (dateInput && dateInput.value) {
+                        const date = new Date(dateInput.value);
+                        // Validate date is reasonable (not too far in future - max 2 years)
+                        const today = new Date();
+                        const maxFutureDate = new Date();
+                        maxFutureDate.setFullYear(today.getFullYear() + 2);
+                        if (date > maxFutureDate) {
+                            showNotification(`Election date cannot be more than 2 years in the future for ${checkbox.dataset.electionName}`, 'error');
+                            hasError = true;
+                        }
+                    }
+                });
+
+                if (hasError) return;
+
+                // Initialize sync state
+                syncState.isRunning = true;
+                syncState.errors = [];
+                syncState.retryCount = 0;
+                
+                const selectedFiles = Array.from(selectedCheckboxes).map(cb => cb.value);
+                initializeSyncPhases(selectedFiles);
+
+                // Show progress UI
+                progressContainer.style.display = 'block';
+                results.style.display = 'none';
+                errorReporting.style.display = 'none';
+                syncBtn.disabled = true;
+                syncBtn.textContent = 'Syncing...';
+
+                // Start progress simulation
+                simulateSyncProgress(selectedFiles);
+
+                // Prepare form data
+                const formData = new FormData(syncForm);
+                
+                // Submit via AJAX with progress tracking
+                fetch('{{ url_for("admin_virginia_sync_post") }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    syncState.isRunning = false;
+                    progressContainer.style.display = 'none';
+                    results.style.display = 'block';
+                    
+                    if (data.success) {
+                        displayResults(data.results);
+                        loadSyncHistory(); // Refresh history after successful sync
+                    } else {
+                        resultsContent.innerHTML = `
+                            <div class="result-item result-error">
+                                <div class="result-title">Sync Failed</div>
+                                <div class="result-details">${data.error}</div>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    syncState.isRunning = false;
+                    progressContainer.style.display = 'none';
+                    results.style.display = 'block';
+                    resultsContent.innerHTML = `
+                        <div class="result-item result-error">
+                            <div class="result-title">Network Error</div>
+                            <div class="result-details">${error.message}</div>
+                        </div>
+                    `;
+                })
+                .finally(() => {
+                    syncBtn.disabled = false;
+                    syncBtn.textContent = 'Sync Selected Files';
+                });
+            });
+            
+            // Simulate sync progress (in real implementation, this would be driven by server-side events)
+            function simulateSyncProgress(selectedFiles) {
+                let currentPhaseIndex = 0;
+                
+                function processNextPhase() {
+                    if (currentPhaseIndex >= syncState.phases.length || !syncState.isRunning) {
+                        return;
+                    }
+                    
+                    const phase = syncState.phases[currentPhaseIndex];
+                    updateProgress(phase.id, 'active', 0);
+                    
+                    // Simulate phase progress
+                    let progress = 0;
+                    const progressInterval = setInterval(() => {
+                        if (!syncState.isRunning || progress >= 100) {
+                            clearInterval(progressInterval);
+                            
+                            if (progress >= 100) {
+                                updateProgress(phase.id, 'completed', 100);
+                                currentPhaseIndex++;
+                                setTimeout(processNextPhase, 500);
+                            }
+                            return;
+                        }
+                        
+                        progress += Math.random() * 20;
+                        progress = Math.min(progress, 100);
+                        updateProgress(phase.id, 'active', progress);
+                    }, 200);
+                }
+                
+                processNextPhase();
+            }
+
+            // Refresh functionality
+            refreshBtn.addEventListener('click', function() {
+                window.location.reload();
+            });
+
+            // Display results
+            function displayResults(results) {
+                let html = '';
+                let successCount = 0;
+                let errorCount = 0;
+
+                results.forEach(result => {
+                    if (result.success) {
+                        successCount++;
+                        const pp = result.polling_places;
+                        const pr = result.precincts;
+                        html += `
+                            <div class="result-item result-success">
+                                <div class="result-title">${result.election_name}</div>
+                                <div class="result-details">
+                                    ✅ Polling places: ${pp.added} added, ${pp.updated} updated, ${pp.errors} errors<br>
+                                    ✅ Precincts: ${pr.added} added, ${pr.updated} updated, ${pr.errors} errors
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        errorCount++;
+                        html += `
+                            <div class="result-item result-error">
+                                <div class="result-title">Sync Failed</div>
+                                <div class="result-details">${result.error}</div>
+                            </div>
+                        `;
+                    }
+                });
+
+                // Add summary
+                html = `
+                    <div style="margin-bottom: 15px; padding: 10px; background: #e9ecef; border-radius: 4px;">
+                        <strong>Summary:</strong> ${successCount} successful, ${errorCount} failed
+                    </div>
+                ` + html;
+
+                resultsContent.innerHTML = html;
+            }
+
+            // Load sync history
+            function loadSyncHistory() {
+                fetch('{{ url_for("admin_api_virginia_sync_history") }}')
+                .then(response => response.json())
+                .then(data => {
+                    displaySyncHistory(data.history || []);
+                })
+                .catch(error => {
+                    console.error('Error loading sync history:', error);
+                    syncHistoryContainer.innerHTML = `
+                        <p style="color: #dc3545; font-size: 14px;">Error loading sync history</p>
+                    `;
+                });
+            }
+            
+            // Display sync history
+            function displaySyncHistory(history) {
+                if (history.length === 0) {
+                    syncHistoryContainer.innerHTML = `
+                        <p style="color: #666; font-size: 14px;">No sync history available</p>
+                    `;
+                    return;
+                }
+                
+                const historyHtml = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Election</th>
+                                <th>Files</th>
+                                <th>Polling Places</th>
+                                <th>Precincts</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${history.map(item => `
+                                <tr>
+                                    <td>${formatTimestamp(item.timestamp)}</td>
+                                    <td>${item.election_name || 'Multiple'}</td>
+                                    <td>${item.files_processed || 1}</td>
+                                    <td>${item.polling_places_added || 0} added, ${item.polling_places_updated || 0} updated</td>
+                                    <td>${item.precincts_added || 0} added, ${item.precincts_updated || 0} updated</td>
+                                    <td><span class="history-status ${item.success ? 'success' : 'error'}">${item.success ? 'Success' : 'Failed'}</span></td>
+                                    <td>${item.duration || 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                syncHistoryContainer.innerHTML = historyHtml;
+            }
+            
+            // Format timestamp for display
+            function formatTimestamp(timestamp) {
+                if (!timestamp) return 'N/A';
+                const date = new Date(timestamp);
+                return date.toLocaleString() + ' ' + date.toLocaleTimeString('en-US', { 
+                    hour12: false, 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+            }
+            
+            // Show notification (accessible)
+            function showNotification(message, type = 'info') {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = `alert alert-${type}`;
+                notification.setAttribute('role', 'alert');
+                notification.setAttribute('aria-live', 'polite');
+                notification.textContent = message;
+                
+                // Insert at top of container
+                const container = document.querySelector('.container');
+                container.insertBefore(notification, container.firstChild);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 5000);
+                
+                // Announce to screen readers
+                const announcement = document.createElement('div');
+                announcement.className = 'sr-only';
+                announcement.setAttribute('aria-live', 'assertive');
+                announcement.textContent = message;
+                document.body.appendChild(announcement);
+                setTimeout(() => {
+                    document.body.removeChild(announcement);
+                }, 1000);
+            }
+            
+            // Keyboard navigation enhancements
+            function enhanceKeyboardNavigation() {
+                // Add keyboard shortcuts
+                document.addEventListener('keydown', function(e) {
+                    // Ctrl/Cmd + Enter to submit sync form
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !syncBtn.disabled) {
+                        e.preventDefault();
+                        syncForm.dispatchEvent(new Event('submit'));
+                    }
+                    
+                    // Escape to cancel loading overlay
+                    if (e.key === 'Escape' && loadingOverlay.style.display === 'flex') {
+                        loadingOverlay.style.display = 'none';
+                    }
+                });
+                
+                // Enhance table navigation
+                const tables = document.querySelectorAll('table');
+                tables.forEach(table => {
+                    table.setAttribute('role', 'table');
+                    const headers = table.querySelectorAll('th');
+                    headers.forEach(header => {
+                        header.setAttribute('role', 'columnheader');
+                        header.setAttribute('scope', 'col');
+                    });
+                    const cells = table.querySelectorAll('td');
+                    cells.forEach(cell => {
+                        cell.setAttribute('role', 'cell');
+                    });
+                });
+            }
+            
+            // Add bulk operations
+            function addBulkOperations() {
+                // Add bulk select by date range
+                const bulkActions = document.querySelector('.bulk-actions');
+                const dateRangeFilter = document.createElement('div');
+                dateRangeFilter.innerHTML = `
+                    <label style="margin-right: 10px;">
+                        From: <input type="date" id="date-from" style="margin-left: 5px;">
+                    </label>
+                    <label>
+                        To: <input type="date" id="date-to" style="margin-left: 5px;">
+                    </label>
+                    <button type="button" id="filter-by-date" class="btn btn-secondary btn-small">Filter by Date</button>
+                `;
+                bulkActions.appendChild(dateRangeFilter);
+                
+                // Add event listener for date filtering
+                document.getElementById('filter-by-date').addEventListener('click', function() {
+                    const fromDate = document.getElementById('date-from').value;
+                    const toDate = document.getElementById('date-to').value;
+                    
+                    if (!fromDate && !toDate) {
+                        showNotification('Please select a date range', 'error');
+                        return;
+                    }
+                    
+                    const checkboxes = document.querySelectorAll('input[name="selected_files"]');
+                    checkboxes.forEach(checkbox => {
+                        const electionDate = checkbox.dataset.detectedDate;
+                        let shouldSelect = true;
+                        
+                        if (fromDate && electionDate < fromDate) shouldSelect = false;
+                        if (toDate && electionDate > toDate) shouldSelect = false;
+                        
+                        checkbox.checked = shouldSelect;
+                    });
+                    
+                    updateSyncButton();
+                    showNotification(`Selected files within date range`, 'success');
+                });
+            }
+            
+            // Add real-time validation
+            function addRealTimeValidation() {
+                const dateInputs = document.querySelectorAll('input[name="custom_dates"]');
+                dateInputs.forEach((input, index) => {
+                    input.addEventListener('input', function() {
+                        if (this.value) {
+                            try {
+                                const date = new Date(this.value);
+                                const today = new Date();
+                                const maxFutureDate = new Date();
+                                maxFutureDate.setFullYear(today.getFullYear() + 2);
+                                
+                                if (date > maxFutureDate) {
+                                    this.setCustomValidity('Election date cannot be more than 2 years in the future');
+                                    this.classList.add('error');
+                                } else {
+                                    this.setCustomValidity('');
+                                    this.classList.remove('error');
+                                }
+                            } catch (e) {
+                                this.setCustomValidity('Invalid date format');
+                                this.classList.add('error');
+                            }
+                        } else {
+                            this.setCustomValidity('');
+                            this.classList.remove('error');
+                        }
+                    });
+                });
+            }
+            
+            // Add error styles
+            const errorStyles = document.createElement('style');
+            errorStyles.textContent = `
+                input.error {
+                    border-color: #dc3545 !important;
+                    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+                }
+                input:focus {
+                    outline: 2px solid #667eea;
+                    outline-offset: 2px;
+                }
+                .btn:focus {
+                    outline: 2px solid #667eea;
+                    outline-offset: 2px;
+                }
+            `;
+            document.head.appendChild(errorStyles);
+            
+            // Initialize all enhancements
+            function initializeEnhancements() {
+                loadSyncHistory();
+                enhanceKeyboardNavigation();
+                addBulkOperations();
+                addRealTimeValidation();
+                enhanceAccessibility();
+                
+                // Add ARIA labels for better accessibility
+                syncBtn.setAttribute('aria-label', 'Sync selected Virginia election files');
+                refreshBtn.setAttribute('aria-label', 'Refresh file list');
+                
+                // Add loading state management
+                const originalFetch = window.fetch;
+                window.fetch = function(...args) {
+                    if (syncState.isRunning) {
+                        loadingOverlay.style.display = 'flex';
+                        document.body.setAttribute('aria-busy', 'true');
+                    }
+                    return originalFetch.apply(this, args).finally(() => {
+                        if (!syncState.isRunning) {
+                            loadingOverlay.style.display = 'none';
+                            document.body.removeAttribute('aria-busy');
+                        }
+                    });
+                };
+            }
+            
+            // Additional accessibility enhancements
+            function enhanceAccessibility() {
+                // Add skip to main content link
+                const skipLink = document.createElement('a');
+                skipLink.href = '#main-content';
+                skipLink.className = 'sr-only';
+                skipLink.textContent = 'Skip to main content';
+                skipLink.setAttribute('aria-label', 'Skip to main content');
+                document.body.insertBefore(skipLink, document.body.firstChild);
+                
+                // Add main content id to the main card
+                const mainCard = document.querySelector('.card');
+                if (mainCard) {
+                    mainCard.id = 'main-content';
+                }
+                
+                // Enhance form validation with ARIA
+                syncForm.setAttribute('novalidate', 'true');
+                syncForm.addEventListener('submit', function(e) {
+                    const selectedCheckboxes = document.querySelectorAll('input[name="selected_files"]:checked');
+                    if (selectedCheckboxes.length === 0) {
+                        e.preventDefault();
+                        showNotification('Please select at least one file to sync.', 'error');
+                        
+                        // Focus on first checkbox for better UX
+                        const firstCheckbox = document.querySelector('input[name="selected_files"]');
+                        if (firstCheckbox) {
+                            firstCheckbox.focus();
+                        }
+                    }
+                });
+                
+                // Add live region for announcements
+                const liveRegion = document.createElement('div');
+                liveRegion.setAttribute('aria-live', 'polite');
+                liveRegion.setAttribute('aria-atomic', 'true');
+                liveRegion.className = 'sr-only';
+                liveRegion.id = 'announcements';
+                document.body.appendChild(liveRegion);
+                
+                // Announce important state changes
+                function announce(message) {
+                    liveRegion.textContent = message;
+                    setTimeout(() => {
+                        liveRegion.textContent = '';
+                    }, 1000);
+                }
+                
+                // Override showNotification to also announce
+                const originalShowNotification = showNotification;
+                showNotification = function(message, type) {
+                    originalShowNotification(message, type);
+                    announce(message);
+                };
+                
+                // Add keyboard navigation for table rows
+                const tableRows = document.querySelectorAll('tbody tr');
+                tableRows.forEach(row => {
+                    row.setAttribute('tabindex', '0');
+                    row.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            const checkbox = row.querySelector('input[type="checkbox"]');
+                            if (checkbox) {
+                                checkbox.checked = !checkbox.checked;
+                                checkbox.dispatchEvent(new Event('change'));
+                            }
+                        }
+                    });
+                });
+                
+                // Add progress announcements for screen readers
+                const originalUpdateProgress = updateProgress;
+                updateProgress = function(phaseId, status, progress, message) {
+                    originalUpdateProgress(phaseId, status, progress, message);
+                    
+                    const phase = syncState.phases.find(p => p.id === phaseId);
+                    if (phase) {
+                        let announcement = '';
+                        if (status === 'completed') {
+                            announcement = `${phase.name} completed`;
+                        } else if (status === 'error') {
+                            announcement = `Error in ${phase.name}: ${message}`;
+                        } else if (status === 'active' && progress > 0) {
+                            announcement = `${phase.name}: ${Math.round(progress)}% complete`;
+                        }
+                        
+                        if (announcement) {
+                            announce(announcement);
+                        }
+                    }
+                };
+            }
+            
+            // Initialize
+            updateSyncButton();
+            initializeEnhancements();
+        });
+    </script>
+</body>
+</html>
