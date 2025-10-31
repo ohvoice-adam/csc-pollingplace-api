@@ -700,6 +700,11 @@ class AuditTrailView(SecureModelView):
 def init_admin(app, db):
     """Initialize Flask-Admin with custom views"""
     
+    # Check if Flask-Admin is already initialized
+    if hasattr(app, 'extensions') and 'admin' in app.extensions:
+        app.logger.info("Flask-Admin already initialized, returning existing instance")
+        return app.extensions['admin']
+    
     try:
         # Import models here to avoid circular imports
         from app import PollingPlace, Precinct, Election, PrecinctAssignment, APIKey, AdminUser
@@ -711,11 +716,9 @@ def init_admin(app, db):
             app, 
             name='CSC Polling Place Admin',
             template_mode='bootstrap3',
-            url='/admin'
+            url='/admin/db',
+            index_view=RecordsView(name='Records Dashboard', url='/admin/db', endpoint='db_dashboard')
         )
-        
-        # Add custom records dashboard view
-        admin.add_view(RecordsView(name='Records Dashboard', url='/admin/records', endpoint='records_dashboard'))
         
         # Add model views
         admin.add_view(PollingPlaceView(PollingPlace, db.session, name='Polling Places', endpoint='pollingplace'))

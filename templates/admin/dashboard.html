@@ -184,7 +184,7 @@
             <h1>Admin Dashboard</h1>
             <div class="header-actions">
                 <a href="{{ url_for('admin_map') }}" class="btn btn-primary">View Map</a>
-                <a href="{{ url_for('records_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
+                <a href="{{ url_for('db_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">View Logs</a>
                 <a href="{{ url_for('admin_change_password') }}" class="btn btn-secondary">Change Password</a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
@@ -239,7 +239,7 @@
         <div class="card">
             <h2>Quick Actions</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
-                <a href="{{ url_for('records_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
+                <a href="{{ url_for('db_dashboard.index') }}" class="btn btn-primary">Edit Records</a>
                 <a href="{{ url_for('admin_plugins') }}" class="btn btn-primary">Manage Plugins</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn btn-primary">View Logs</a>
                 <a href="{{ url_for('admin_docs') }}" class="btn btn-primary">📚 Documentation</a>

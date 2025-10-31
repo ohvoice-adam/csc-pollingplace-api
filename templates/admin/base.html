@@ -228,7 +228,7 @@
             </a>
             <ul class="navbar-nav">
                 <li><a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}class="active"{% endif %}>Dashboard</a></li>
-                <li><a href="{{ url_for('records_dashboard.index') }}" {% if 'records' in request.endpoint %}class="active"{% endif %}>Records</a></li>
+                <li><a href="{{ url_for('db_dashboard.index') }}" {% if 'db' in request.endpoint %}class="active"{% endif %}>Database</a></li>
                 <li><a href="{{ url_for('admin_map') }}" {% if request.endpoint == 'admin_map' %}class="active"{% endif %}>Map</a></li>
                 <li><a href="{{ url_for('admin_plugins') }}" {% if 'plugin' in request.endpoint %}class="active"{% endif %}>Plugins</a></li>
                 <li><a href="{{ url_for('admin_docs') }}" {% if request.endpoint == 'admin_docs' %}class="active"{% endif %}>📚 Docs</a></li>
