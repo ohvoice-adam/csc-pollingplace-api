@@ -487,6 +487,40 @@ All endpoints require authentication.
 - Rate limit: 100/hour
 - Example: `curl -H "X-API-Key: your-key" "http://localhost:8080/api/elections/1/precincts"`
 
+### Bulk Operations
+
+All endpoints require authentication.
+
+**POST /api/bulk-delete**
+- Bulk delete polling places, precincts, assignments, and/or elections with filtering options
+- Headers: `X-API-Key: <your-key>`
+- Body: 
+  ```json
+  {
+    "delete_types": ["polling_places", "precincts", "assignments", "elections"],
+    "filters": {
+      "state": "OH",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "created_after": "2024-01-01",
+      "created_before": "2024-12-31",
+      "source_plugin": "ohio"
+    },
+    "dry_run": true,
+    "confirm": "DELETE"
+  }
+  ```
+- Rate limit: 10/hour
+- Example: `curl -X POST -H "X-API-Key: your-key" -H "Content-Type: application/json" -d '{"delete_types":["assignments","elections"],"filters":{"state":"OH"},"dry_run":true}' "http://localhost:8080/api/bulk-delete"`
+- Notes: 
+  - Always perform a dry run first to review what will be deleted
+  - Requires explicit "DELETE" confirmation for actual deletion
+  - Supports deleting any combination of record types simultaneously
+  - Polling places support date range filtering (start_date, end_date)
+  - All types support creation date filtering and source plugin filtering
+  - Assignments can be filtered by state through their precinct relationship
+  - Large deletions (>1000 records) require enhanced confirmation: `DELETE_LARGE_[count]`
+
 ### VIP Format Example
 
 When requesting data with `?format=vip`, the response follows the Voting Information Project specification:

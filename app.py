@@ -686,20 +686,21 @@ def get_election_precincts(election_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/polling-places/bulk-delete', methods=['POST'])
+@app.route('/api/bulk-delete', methods=['POST'])
 @require_api_key
 @limiter.limit(get_api_key_limits)
-def bulk_delete_polling_places():
+def bulk_delete_records():
     """
-    Bulk delete polling places with filtering options
+    Bulk delete polling places, precincts, assignments, and/or elections with filtering options
     Requires confirmation for safety
     
     Request body:
     {
+        "delete_types": ["polling_places", "precincts", "assignments", "elections"],  // required: what to delete
         "filters": {
             "state": "OH",           // optional: filter by state code
-            "start_date": "2024-01-01",  // optional: filter by start_date (>=)
-            "end_date": "2024-12-31",    // optional: filter by end_date (<=)
+            "start_date": "2024-01-01",  // optional: filter by start_date (>=) - polling places only
+            "end_date": "2024-12-31",    // optional: filter by end_date (<=) - polling places only
             "created_after": "2024-01-01", // optional: filter by created_at (>=)
             "created_before": "2024-12-31", // optional: filter by created_at (<=)
             "source_plugin": "ohio"   // optional: filter by source plugin
@@ -713,55 +714,159 @@ def bulk_delete_polling_places():
         if not data:
             return jsonify({'error': 'Request body required'}), 400
         
+        delete_types = data.get('delete_types', [])
         filters = data.get('filters', {})
         dry_run = data.get('dry_run', False)
         confirm = data.get('confirm')
         
-        # Build query
-        query = PollingPlace.query
+        # Validate delete_types
+        if not delete_types:
+            return jsonify({'error': 'delete_types is required and must be a non-empty list'}), 400
         
-        # Apply filters
-        if 'state' in filters and filters['state']:
-            query = query.filter(PollingPlace.state == filters['state'])
+        valid_types = ['polling_places', 'precincts', 'assignments', 'elections']
+        invalid_types = [t for t in delete_types if t not in valid_types]
+        if invalid_types:
+            return jsonify({'error': f'Invalid delete_types: {invalid_types}. Valid types are: {valid_types}'}), 400
         
-        if 'start_date' in filters and filters['start_date']:
-            try:
-                start_date = datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
-                query = query.filter(PollingPlace.start_date >= start_date)
-            except ValueError:
-                return jsonify({'error': 'Invalid start_date format. Use YYYY-MM-DD'}), 400
+        results = {}
+        total_count = 0
         
-        if 'end_date' in filters and filters['end_date']:
-            try:
-                end_date = datetime.strptime(filters['end_date'], '%Y-%m-%d').date()
-                query = query.filter(PollingPlace.end_date <= end_date)
-            except ValueError:
-                return jsonify({'error': 'Invalid end_date format. Use YYYY-MM-DD'}), 400
+        # Process each delete type
+        for delete_type in delete_types:
+            if delete_type == 'polling_places':
+                # Build query for polling places
+                query = PollingPlace.query
+                
+                # Apply filters
+                if 'state' in filters and filters['state']:
+                    query = query.filter(PollingPlace.state == filters['state'])
+                
+                if 'start_date' in filters and filters['start_date']:
+                    try:
+                        start_date = datetime.strptime(filters['start_date'], '%Y-%m-%d').date()
+                        query = query.filter(PollingPlace.start_date >= start_date)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid start_date format. Use YYYY-MM-DD'}), 400
+                
+                if 'end_date' in filters and filters['end_date']:
+                    try:
+                        end_date = datetime.strptime(filters['end_date'], '%Y-%m-%d').date()
+                        query = query.filter(PollingPlace.end_date <= end_date)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid end_date format. Use YYYY-MM-DD'}), 400
+                
+                if 'created_after' in filters and filters['created_after']:
+                    try:
+                        created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
+                        query = query.filter(PollingPlace.created_at >= created_after)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
+                
+                if 'created_before' in filters and filters['created_before']:
+                    try:
+                        created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
+                        query = query.filter(PollingPlace.created_at <= created_before)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
+                
+                if 'source_plugin' in filters and filters['source_plugin']:
+                    query = query.filter(PollingPlace.source_plugin == filters['source_plugin'])
+                
+                # Get count
+                count = query.count()
+                results['polling_places'] = {'count': count, 'query': query}
+                total_count += count
+                
+            elif delete_type == 'precincts':
+                # Build query for precincts
+                query = Precinct.query
+                
+                # Apply filters (precincts have fewer filterable fields)
+                if 'state' in filters and filters['state']:
+                    query = query.filter(Precinct.state == filters['state'])
+                
+                if 'created_after' in filters and filters['created_after']:
+                    try:
+                        created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
+                        query = query.filter(Precinct.created_at >= created_after)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
+                
+                if 'created_before' in filters and filters['created_before']:
+                    try:
+                        created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
+                        query = query.filter(Precinct.created_at <= created_before)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
+                
+                if 'source_plugin' in filters and filters['source_plugin']:
+                    query = query.filter(Precinct.source_plugin == filters['source_plugin'])
+                
+                # Get count
+                count = query.count()
+                results['precincts'] = {'count': count, 'query': query}
+                total_count += count
+                
+            elif delete_type == 'assignments':
+                # Build query for precinct assignments
+                query = PrecinctAssignment.query
+                
+                # Apply filters
+                if 'state' in filters and filters['state']:
+                    # Filter by state through precinct relationship
+                    query = query.join(Precinct).filter(Precinct.state == filters['state'])
+                
+                if 'created_after' in filters and filters['created_after']:
+                    try:
+                        created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
+                        query = query.filter(PrecinctAssignment.created_at >= created_after)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
+                
+                if 'created_before' in filters and filters['created_before']:
+                    try:
+                        created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
+                        query = query.filter(PrecinctAssignment.created_at <= created_before)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
+                
+                # Get count
+                count = query.count()
+                results['assignments'] = {'count': count, 'query': query}
+                total_count += count
+                
+            elif delete_type == 'elections':
+                # Build query for elections
+                query = Election.query
+                
+                # Apply filters
+                if 'state' in filters and filters['state']:
+                    query = query.filter(Election.state == filters['state'])
+                
+                if 'created_after' in filters and filters['created_after']:
+                    try:
+                        created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
+                        query = query.filter(Election.created_at >= created_after)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
+                
+                if 'created_before' in filters and filters['created_before']:
+                    try:
+                        created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
+                        query = query.filter(Election.created_at <= created_before)
+                    except ValueError:
+                        return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
+                
+                # Get count
+                count = query.count()
+                results['elections'] = {'count': count, 'query': query}
+                total_count += count
         
-        if 'created_after' in filters and filters['created_after']:
-            try:
-                created_after = datetime.strptime(filters['created_after'], '%Y-%m-%d')
-                query = query.filter(PollingPlace.created_at >= created_after)
-            except ValueError:
-                return jsonify({'error': 'Invalid created_after format. Use YYYY-MM-DD'}), 400
-        
-        if 'created_before' in filters and filters['created_before']:
-            try:
-                created_before = datetime.strptime(filters['created_before'], '%Y-%m-%d')
-                query = query.filter(PollingPlace.created_at <= created_before)
-            except ValueError:
-                return jsonify({'error': 'Invalid created_before format. Use YYYY-MM-DD'}), 400
-        
-        if 'source_plugin' in filters and filters['source_plugin']:
-            query = query.filter(PollingPlace.source_plugin == filters['source_plugin'])
-        
-        # Get count of records that would be affected
-        count = query.count()
-        
-        if count == 0:
+        if total_count == 0:
             return jsonify({
-                'message': 'No polling places match the specified filters',
-                'count': 0,
+                'message': 'No records match the specified filters',
+                'total_count': 0,
+                'results': {k: {'count': v['count']} for k, v in results.items()},
                 'dry_run': dry_run
             }), 200
         
@@ -770,35 +875,75 @@ def bulk_delete_polling_places():
             if confirm != 'DELETE':
                 return jsonify({
                     'error': 'Confirmation required. Set "confirm": "DELETE" to proceed with deletion',
-                    'count': count,
+                    'total_count': total_count,
+                    'results': {k: {'count': v['count']} for k, v in results.items()},
                     'dry_run': False
                 }), 400
-            
-
         
         # Perform deletion or dry run
         if dry_run:
             return jsonify({
                 'message': 'Dry run completed. No records were deleted.',
-                'count': count,
+                'total_count': total_count,
+                'results': {k: {'count': v['count']} for k, v in results.items()},
                 'dry_run': True,
-                'filters': filters
+                'filters': filters,
+                'delete_types': delete_types
             }), 200
         else:
-            # Get IDs for logging
-            polling_place_ids = [pp.id for pp in query.all()]
+            # Perform actual deletions
+            deleted_counts = {}
+            total_deleted = 0
             
-            # Delete the records
-            deleted_count = query.delete()
+            for delete_type, result in results.items():
+                query = result['query']
+                count = result['count']
+                
+                if count > 0:
+                    # Get IDs for logging
+                    if delete_type == 'polling_places':
+                        record_ids = [pp.id for pp in query.all()]
+                        entity_name = 'polling places'
+                    elif delete_type == 'precincts':
+                        record_ids = [p.id for p in query.all()]
+                        entity_name = 'precincts'
+                    elif delete_type == 'assignments':
+                        record_ids = [a.id for a in query.all()]
+                        entity_name = 'precinct assignments'
+                    elif delete_type == 'elections':
+                        record_ids = [e.id for e in query.all()]
+                        entity_name = 'elections'
+                    
+                    # Perform deletion
+                    deleted_count = query.delete()
+                    deleted_counts[delete_type] = deleted_count
+                    total_deleted += deleted_count
+                    
+                    # Log the deletion
+                    app.logger.warning(f"Bulk delete performed by API key: {deleted_count} {entity_name} deleted. IDs: {record_ids[:10]}{'...' if len(record_ids) > 10 else ''}")
+            
             db.session.commit()
             
-            app.logger.warning(f"Bulk delete performed by API key: {deleted_count} polling places deleted. IDs: {polling_place_ids[:10]}{'...' if len(polling_place_ids) > 10 else ''}")
+            # Build success message
+            messages = []
+            if 'polling_places' in deleted_counts:
+                messages.append(f"{deleted_counts['polling_places']} polling places")
+            if 'precincts' in deleted_counts:
+                messages.append(f"{deleted_counts['precincts']} precincts")
+            if 'assignments' in deleted_counts:
+                messages.append(f"{deleted_counts['assignments']} precinct assignments")
+            if 'elections' in deleted_counts:
+                messages.append(f"{deleted_counts['elections']} elections")
+            
+            message = f'Successfully deleted {", ".join(messages)}'
             
             return jsonify({
-                'message': f'Successfully deleted {deleted_count} polling places',
-                'count': deleted_count,
+                'message': message,
+                'total_count': total_deleted,
+                'results': deleted_counts,
                 'dry_run': False,
-                'filters': filters
+                'filters': filters,
+                'delete_types': delete_types
             }), 200
     
     except Exception as e:
@@ -952,8 +1097,8 @@ def admin_dashboard():
 
 @app.route('/admin/bulk-delete-pollingplaces')
 @login_required
-def admin_bulk_delete_pollingplaces():
-    """Bulk delete polling places interface"""
+def admin_bulk_delete_records():
+    """Bulk delete records interface"""
     return render_template('admin/bulk_delete_pollingplaces.html')
 
 

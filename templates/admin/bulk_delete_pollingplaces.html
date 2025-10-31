@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Delete Polling Places - CSC Polling Place API</title>
+    <title>Bulk Delete Records - CSC Polling Place API</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -74,7 +74,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h1 class="h3">
                         <i class="bi bi-trash3 text-danger"></i>
-                        Bulk Delete Polling Places
+                        Bulk Delete Records
                     </h1>
                     <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Back to Dashboard
@@ -88,7 +88,7 @@
                         Danger Zone - Permanent Deletion
                     </h4>
                     <p class="mb-3">
-                        <strong>Warning:</strong> This action will permanently delete polling places from the database. 
+                        <strong>Warning:</strong> This action will permanently delete polling places and/or precincts from the database. 
                         This action cannot be undone. Please be extremely careful and double-check your filters before proceeding.
                     </p>
                     <ul class="mb-0">
@@ -97,6 +97,52 @@
                         <li>Always perform a dry run first to review what will be deleted</li>
                         <li>Consider backing up your data before performing bulk deletion</li>
                     </ul>
+                </div>
+
+                <!-- Delete Type Selection -->
+                <div class="filter-section mb-4">
+                    <h5 class="mb-3">
+                        <i class="bi bi-check2-square"></i>
+                        Select Records to Delete
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="polling_places" id="delete_polling_places" checked>
+                                <label class="form-check-label" for="delete_polling_places">
+                                    <i class="bi bi-geo-alt"></i> Polling Places
+                                </label>
+                                <div class="form-text">Delete polling place records</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="precincts" id="delete_precincts">
+                                <label class="form-check-label" for="delete_precincts">
+                                    <i class="bi bi-map"></i> Precincts
+                                </label>
+                                <div class="form-text">Delete precinct records</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="assignments" id="delete_assignments">
+                                <label class="form-check-label" for="delete_assignments">
+                                    <i class="bi bi-link-45deg"></i> Assignments
+                                </label>
+                                <div class="form-text">Delete precinct assignment records</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="elections" id="delete_elections">
+                                <label class="form-check-label" for="delete_elections">
+                                    <i class="bi bi-calendar-event"></i> Elections
+                                </label>
+                                <div class="form-text">Delete election records</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Filter Section -->
@@ -156,7 +202,7 @@
                         </div>
                         
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-primary" onclick="performDryRun()">
+                            <button type="button" class="btn btn-primary" id="dryRunBtn">
                                 <i class="bi bi-search"></i>
                                 <span class="btn-text">Preview Deletion (Dry Run)</span>
                                 <span class="spinner-border spinner-border-sm loading" role="status"></span>
@@ -257,6 +303,28 @@
             return filters;
         }
 
+        function collectDeleteTypes() {
+            const deleteTypes = [];
+            
+            if (document.getElementById('delete_polling_places').checked) {
+                deleteTypes.push('polling_places');
+            }
+            
+            if (document.getElementById('delete_precincts').checked) {
+                deleteTypes.push('precincts');
+            }
+            
+            if (document.getElementById('delete_assignments').checked) {
+                deleteTypes.push('assignments');
+            }
+            
+            if (document.getElementById('delete_elections').checked) {
+                deleteTypes.push('elections');
+            }
+            
+            return deleteTypes;
+        }
+
         function clearFilters() {
             document.getElementById('filterForm').reset();
             document.getElementById('resultsSection').style.display = 'none';
@@ -265,32 +333,41 @@
         }
 
         async function performDryRun() {
-            const button = event.target.closest('button');
+            const button = document.getElementById('dryRunBtn');
             showLoading(button, true);
             
             try {
                 currentFilters = collectFilters();
+                const deleteTypes = collectDeleteTypes();
                 
-                const response = await fetch('/api/polling-places/bulk-delete', {
+                if (deleteTypes.length === 0) {
+                    showResults('error', 'Please select at least one record type to delete.');
+                    showLoading(button, false);
+                    return;
+                }
+                
+                const response = await fetch('/api/bulk-delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-API-Key': getApiKey()
                     },
                     body: JSON.stringify({
+                        delete_types: deleteTypes,
                         filters: currentFilters,
                         dry_run: true
                     })
                 });
                 
-                const data = await response.json();
-                
-                if (response.ok) {
-                    dryRunResult = data;
-                    showDryRunResults(data);
-                } else {
-                    showResults('error', data.error || 'An error occurred during dry run');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    showResults('error', errorData.error || 'An error occurred during dry run');
+                    return;
                 }
+                
+                const data = await response.json();
+                dryRunResult = data;
+                showDryRunResults(data);
             } catch (error) {
                 showResults('error', `Network error: ${error.message}`);
             } finally {
@@ -304,26 +381,38 @@
             
             let html = '';
             
-            if (data.count === 0) {
-                html = showMessage('info', 'No polling places match the specified filters.');
+            if (data.total_count === 0) {
+                html = showMessage('info', 'No records match the specified filters.');
             } else {
-                html = `
-                    ${showMessage('info', `Found ${data.count} polling places matching your filters.`)}
-                    <div class="mt-3">
-                        <h6>Filter Summary:</h6>
-                        <ul class="list-unstyled">
-                `;
-                
-                for (const [key, value] of Object.entries(data.filters)) {
-                    html += `<li><strong>${key}:</strong> ${value}</li>`;
+                // Build summary message
+                let summaryParts = [];
+                if (data.results.polling_places && data.results.polling_places.count > 0) {
+                    summaryParts.push(data.results.polling_places.count + ' polling places');
+                }
+                if (data.results.precincts && data.results.precincts.count > 0) {
+                    summaryParts.push(data.results.precincts.count + ' precincts');
+                }
+                if (data.results.assignments && data.results.assignments.count > 0) {
+                    summaryParts.push(data.results.assignments.count + ' assignments');
+                }
+                if (data.results.elections && data.results.elections.count > 0) {
+                    summaryParts.push(data.results.elections.count + ' elections');
                 }
                 
-                html += `
-                        </ul>
-                    </div>
-                `;
+                var summaryText = summaryParts.length > 0 ? ' (' + summaryParts.join(', ') + ')' : '';
                 
-                if (data.count > 0) {
+                html = showMessage('info', 'Found ' + data.total_count + ' records matching your filters' + summaryText + '.') +
+                    '<div class="mt-3">' +
+                        '<h6>Filter Summary:</h6>' +
+                        '<ul class="list-unstyled">';
+                
+                for (const [key, value] of Object.entries(data.filters)) {
+                    html += '<li><strong>' + key + ':</strong> ' + value + '</li>';
+                }
+                
+                html += '</ul></div>';
+                
+                if (data.total_count > 0) {
                     html += `
                         <div class="mt-3">
                             <button type="button" class="btn btn-warning" onclick="showConfirmation()">
@@ -353,15 +442,46 @@
         }
 
         function showConfirmation() {
-            if (!dryRunResult || dryRunResult.count === 0) {
+            if (!dryRunResult || dryRunResult.total_count === 0) {
                 return;
             }
             
             const confirmationSection = document.getElementById('confirmationSection');
             const confirmationContent = document.getElementById('confirmationContent');
             
+            // Build summary message for confirmation
+            let summaryParts = [];
+            if (dryRunResult.results.polling_places && dryRunResult.results.polling_places.count > 0) {
+                summaryParts.push(`${dryRunResult.results.polling_places.count} polling places`);
+            }
+            if (dryRunResult.results.precincts && dryRunResult.results.precincts.count > 0) {
+                summaryParts.push(`${dryRunResult.results.precincts.count} precincts`);
+            }
+            if (dryRunResult.results.assignments && dryRunResult.results.assignments.count > 0) {
+                summaryParts.push(`${dryRunResult.results.assignments.count} assignments`);
+            }
+            if (dryRunResult.results.elections && dryRunResult.results.elections.count > 0) {
+                summaryParts.push(`${dryRunResult.results.elections.count} elections`);
+            }
+            
+            const isLargeDeletion = dryRunResult.total_count > 1000;
+            
             let html = `
-                ${showMessage('warning', `You are about to permanently delete ${dryRunResult.count} polling places.`)}
+                ${showMessage(isLargeDeletion ? 'error' : 'warning', `You are about to permanently delete ${dryRunResult.total_count} records (${summaryParts.join(', ')}).`)}
+            `;
+            
+            if (isLargeDeletion) {
+                html += `
+                    <div class="alert alert-danger mt-3">
+                        <strong>⚠️ WARNING: Large Deletion Detected</strong><br>
+                        You are attempting to delete ${dryRunResult.total_count} records, which exceeds the safety threshold of 1000 records.
+                        <br><br>
+                        <strong>Additional confirmation required:</strong> Please type <code>DELETE_LARGE_${dryRunResult.total_count}</code> to confirm this large deletion.
+                    </div>
+                `;
+            }
+            
+            html += `
                 <div class="mt-3">
                     <h6>Filters Applied:</h6>
                     <ul class="list-unstyled">
@@ -376,14 +496,23 @@
                 </div>
             `;
             
-            document.getElementById('deleteBtn').disabled = false;
+            // Update confirmation label based on deletion size
+            const confirmLabel = document.querySelector('label[for="confirmText"]');
+            if (isLargeDeletion) {
+                confirmLabel.innerHTML = `Type <code>DELETE_LARGE_${dryRunResult.total_count}</code> to confirm:`;
+            } else {
+                confirmLabel.innerHTML = 'Type <code>DELETE</code> to confirm:';
+            }
             
             confirmationContent.innerHTML = html;
             confirmationSection.style.display = 'block';
             
-            // Reset confirmation text
+            // Reset confirmation text and button
             document.getElementById('confirmText').value = '';
-            document.getElementById('deleteBtn').disabled = dryRunResult.count > 1000;
+            document.getElementById('deleteBtn').disabled = true;
+            
+            // Store the required confirmation text
+            window.requiredConfirmation = isLargeDeletion ? `DELETE_LARGE_${dryRunResult.total_count}` : 'DELETE';
         }
 
         function cancelDeletion() {
@@ -393,8 +522,10 @@
 
         async function performDeletion() {
             const confirmText = document.getElementById('confirmText').value;
-            if (confirmText !== 'DELETE') {
-                alert('Please type DELETE exactly to confirm.');
+            const requiredConfirmation = window.requiredConfirmation || 'DELETE';
+            
+            if (confirmText !== requiredConfirmation) {
+                alert(`Please type ${requiredConfirmation} exactly to confirm.`);
                 return;
             }
             
@@ -402,13 +533,16 @@
             showLoading(button, true);
             
             try {
-                const response = await fetch('/api/polling-places/bulk-delete', {
+                const deleteTypes = collectDeleteTypes();
+                
+                const response = await fetch('/api/bulk-delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-API-Key': getApiKey()
                     },
                     body: JSON.stringify({
+                        delete_types: deleteTypes,
                         filters: currentFilters,
                         dry_run: false,
                         confirm: 'DELETE'
@@ -434,10 +568,31 @@
         // Enable/disable delete button based on confirmation text
         document.getElementById('confirmText').addEventListener('input', function(e) {
             const deleteBtn = document.getElementById('deleteBtn');
-            if (dryRunResult) {
-                deleteBtn.disabled = e.target.value !== 'DELETE';
+            if (dryRunResult && window.requiredConfirmation) {
+                deleteBtn.disabled = e.target.value !== window.requiredConfirmation;
             }
         });
+
+        // Validate delete type selection
+        document.getElementById('delete_polling_places').addEventListener('change', validateDeleteTypes);
+        document.getElementById('delete_precincts').addEventListener('change', validateDeleteTypes);
+        document.getElementById('delete_assignments').addEventListener('change', validateDeleteTypes);
+        document.getElementById('delete_elections').addEventListener('change', validateDeleteTypes);
+
+        function validateDeleteTypes() {
+            const pollingPlacesChecked = document.getElementById('delete_polling_places').checked;
+            const precinctsChecked = document.getElementById('delete_precincts').checked;
+            const assignmentsChecked = document.getElementById('delete_assignments').checked;
+            const electionsChecked = document.getElementById('delete_elections').checked;
+            
+            if (!pollingPlacesChecked && !precinctsChecked && !assignmentsChecked && !electionsChecked) {
+                // If nothing is checked, default to polling places
+                document.getElementById('delete_polling_places').checked = true;
+            }
+        }
+
+        // Add event listener for dry run button
+        document.getElementById('dryRunBtn').addEventListener('click', performDryRun);
     </script>
 </body>
 </html>
