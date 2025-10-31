@@ -716,9 +716,11 @@ def init_admin(app, db):
             app, 
             name='CSC Polling Place Admin',
             template_mode='bootstrap3',
-            url='/admin/db',
-            index_view=RecordsView(name='Records Dashboard', url='/admin/db', endpoint='db_dashboard')
+            url='/admin/db'
         )
+        
+        # Add custom index view
+        admin.add_view(RecordsView(name='Records Dashboard', endpoint='db_dashboard'))
         
         # Add model views
         admin.add_view(PollingPlaceView(PollingPlace, db.session, name='Polling Places', endpoint='pollingplace'))
