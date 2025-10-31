@@ -1676,6 +1676,129 @@ def admin_api_counties():
 
 
 
+@app.route('/admin/docs')
+@app.route('/admin/docs/<path:doc_path>')
+@login_required
+def admin_docs(doc_path=None):
+    """Documentation viewer for admin interface"""
+    import os
+    import markdown
+    from flask import send_from_directory
+    
+    # Define available documentation
+    docs = {
+        'main': {
+            'title': 'Main Documentation',
+            'file': 'README.md',
+            'description': 'Project overview and setup guide'
+        },
+        'development': {
+            'title': 'Development Guide', 
+            'file': 'DEVELOPMENT.md',
+            'description': 'Development setup and guidelines'
+        },
+        'ui': {
+            'title': 'UI Documentation',
+            'file': 'docs/UI_DOCUMENTATION.md',
+            'description': 'Admin interface documentation'
+        },
+        'plugins': {
+            'title': 'Plugin Guide',
+            'file': 'plugins/README.md',
+            'description': 'Plugin development guide'
+        },
+        'virginia-user': {
+            'title': 'Virginia Plugin - User Guide',
+            'file': 'docs/plugins/virginia_user.md',
+            'description': 'Virginia plugin user documentation'
+        },
+        'virginia-technical': {
+            'title': 'Virginia Plugin - Technical',
+            'file': 'docs/plugins/virginia_technical.md',
+            'description': 'Virginia plugin technical details'
+        },
+        'ohio-user': {
+            'title': 'Ohio Plugin - User Guide',
+            'file': 'docs/plugins/ohio_user.md',
+            'description': 'Ohio plugin user documentation'
+        },
+        'ohio-technical': {
+            'title': 'Ohio Plugin - Technical',
+            'file': 'docs/plugins/ohio_technical.md',
+            'description': 'Ohio plugin technical details'
+        },
+        'bigquery-user': {
+            'title': 'BigQuery Plugin - User Guide',
+            'file': 'docs/plugins/bigquery_user.md',
+            'description': 'BigQuery plugin user documentation'
+        },
+        'bigquery-technical': {
+            'title': 'BigQuery Plugin - Technical',
+            'file': 'docs/plugins/bigquery_technical.md',
+            'description': 'BigQuery plugin technical details'
+        },
+        'dummy-user': {
+            'title': 'Dummy Plugin - User Guide',
+            'file': 'docs/plugins/dummy_user.md',
+            'description': 'Dummy plugin user documentation'
+        },
+        'dummy-technical': {
+            'title': 'Dummy Plugin - Technical',
+            'file': 'docs/plugins/dummy_technical.md',
+            'description': 'Dummy plugin technical details'
+        }
+    }
+    
+    # If no specific doc requested, show index
+    if not doc_path:
+        return render_template('admin/docs.html', docs=docs, current_doc=None)
+    
+    # Find the requested document
+    doc_key = doc_path
+    if doc_key not in docs:
+        # Try to find by partial match
+        for key in docs:
+            if doc_path in key or key in doc_path:
+                doc_key = key
+                break
+        else:
+            return render_template('admin/docs.html', docs=docs, current_doc=None, 
+                                 error=f"Documentation '{doc_path}' not found")
+    
+    doc_info = docs[doc_key]
+    doc_file = doc_info['file']
+    
+    # Read the documentation file
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), doc_file)
+        if not os.path.exists(file_path):
+            return render_template('admin/docs.html', docs=docs, current_doc=None,
+                                 error=f"Documentation file '{doc_file}' not found")
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Convert markdown to HTML
+        html_content = markdown.markdown(content, extensions=[
+            'markdown.extensions.codehilite',
+            'markdown.extensions.tables',
+            'markdown.extensions.toc',
+            'markdown.extensions.fenced_code'
+        ])
+        
+        return render_template('admin/docs.html', 
+                             docs=docs, 
+                             current_doc=doc_key,
+                             doc_title=doc_info['title'],
+                             doc_description=doc_info['description'],
+                             doc_content=html_content)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading documentation {doc_file}: {str(e)}")
+        return render_template('admin/docs.html', docs=docs, current_doc=None,
+                             error=f"Error loading documentation: {str(e)}")
+
+
 @app.route('/admin/geocoding-api-config', methods=['GET', 'POST'])
 @login_required
 def admin_geocoding_api_config():

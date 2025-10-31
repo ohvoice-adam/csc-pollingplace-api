@@ -181,6 +181,50 @@ curl -H "X-API-Key: your-key" \
 
 **Note:** The dummy plugin generates new random data each time it syncs. Data is not persistent between syncs unless stored in the database.
 
+### Virginia Plugin
+
+The **Virginia Plugin** (`virginia.py`) fetches comprehensive polling place and precinct data from the Virginia Department of Elections website.
+
+**Features:**
+- Multi-election support (General, Presidential Primary, Primary elections)
+- Historical data import from all available elections
+- Automatic geocoding of polling place addresses
+- Precinct-to-polling-place assignment tracking
+- Change detection to minimize unnecessary updates
+
+**Documentation:**
+- User Guide: [docs/plugins/virginia_user.md](docs/plugins/virginia_user.md)
+- Technical Details: [docs/plugins/virginia_technical.md](docs/plugins/virginia_technical.md)
+
+### Ohio Plugin
+
+The **Ohio Plugin** (`ohio.py`) fetches polling place and precinct data from Ohio's official CSV files.
+
+**Features:**
+- Automatic data fetching from Ohio state sources
+- Geocoding support for mapping functionality
+- Precinct mapping and assignment tracking
+- File upload support for manual CSV updates
+- Change detection to optimize API usage
+
+**Documentation:**
+- User Guide: [docs/plugins/ohio_user.md](docs/plugins/ohio_user.md)
+- Technical Details: [docs/plugins/ohio_technical.md](docs/plugins/ohio_technical.md)
+
+### BigQuery Plugin
+
+The **BigQuery Plugin** (`bigquery_plugin.py`) queries voter registration data from Google BigQuery for analysis and planning.
+
+**Features:**
+- Voter count data per precinct
+- State-specific configurable queries
+- Real-time data from BigQuery datasets
+- Integration with Google Cloud infrastructure
+
+**Documentation:**
+- User Guide: [docs/plugins/bigquery_user.md](docs/plugins/bigquery_user.md)
+- Technical Details: [docs/plugins/bigquery_technical.md](docs/plugins/bigquery_technical.md)
+
 ## Support
 
 For questions or issues with plugins, please open an issue on the GitHub repository.

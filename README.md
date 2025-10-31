@@ -21,12 +21,15 @@ This API provides a centralized platform to:
 
 ## Technology Stack
 
-- **Framework**: Flask (Python)
-- **Database**: SQLite (embedded, persistent storage via Docker volume)
-- **Authentication**: API Key-based with rate limiting
+- **Framework**: Flask (Python 3.11+)
+- **Database**: SQLite (default) or PostgreSQL/Cloud SQL
+- **Authentication**: API Key-based with rate limiting and bcrypt password hashing
+- **Admin Interface**: Flask-Admin with custom styling and Bootstrap 5
 - **Scheduling**: APScheduler for automated plugin syncs
-- **Deployment**: Google Cloud Run
-- **Container**: Docker
+- **Geocoding**: Census Geocoding Service, Google Maps API, Mapbox (fallback options)
+- **Data Processing**: pandas for CSV/Excel processing, BeautifulSoup for web scraping
+- **Deployment**: Google Cloud Run with Docker containerization
+- **Frontend**: HTML5, CSS3, JavaScript (ES6+), Leaflet.js for maps
 
 ## Local Development
 
@@ -34,6 +37,7 @@ This API provides a centralized platform to:
 
 - Python 3.11+
 - Docker (optional, for containerized development)
+- Git
 
 ### Setup
 
@@ -53,6 +57,15 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
+
+**Dependencies include:**
+- Flask and Flask extensions (Admin, Login, CORS, SQLAlchemy, Limiter)
+- Database drivers (psycopg2-binary for PostgreSQL)
+- Data processing (pandas, openpyxl for Excel files)
+- Web scraping (BeautifulSoup4)
+- Authentication (bcrypt)
+- Scheduling (APScheduler)
+- Utilities (requests, python-dotenv)
 
 4. Create data directory for database:
 ```bash
@@ -175,6 +188,13 @@ Required environment variables:
 For PostgreSQL/Cloud SQL:
 - `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`, `DB_PORT`
 
+Optional configuration:
+- `GOOGLE_GEOCODING_API_KEY`: Google Geocoding API key for address geocoding
+- `MAPBOX_ACCESS_TOKEN`: Mapbox access token for alternative geocoding service
+- `BIGQUERY_QUERY_TEMPLATE`: SQL query template for BigQuery plugin
+- `SECRET_KEY`: Flask session secret key (auto-generated if not provided)
+- `DEBUG`: Enable debug mode (`True`/`False`)
+
 ### Monitoring and Maintenance
 
 - Monitor application logs in Cloud Run console
@@ -290,7 +310,7 @@ Save this as `plugins/california.py` and it will be automatically loaded.
 
 ## Admin Interface
 
-The API includes a web-based admin interface for managing API keys without needing command-line access.
+The API includes a comprehensive web-based admin interface that provides full control over the system without needing command-line access. The interface features a modern, responsive design with intuitive navigation and powerful management tools.
 
 ### First-Time Setup
 
@@ -304,18 +324,110 @@ On first run, a default admin account is automatically created:
 
 1. Navigate to `http://your-domain/admin` in your browser
 2. Login with admin credentials
-3. From the dashboard you can:
-   - Create new API keys with custom rate limits
-   - View all API keys and their usage statistics
-   - Revoke or reactivate API keys
-   - Change your admin password
+3. Access the comprehensive dashboard with full system management capabilities
 
-### Features
+### Core Features
 
-- **No Console Access Needed**: Perfect for Cloud Run deployments
-- **User-Friendly Interface**: Simple web UI for key management
-- **Secure**: Password hashing with bcrypt, session-based authentication
-- **Audit Trail**: Track key creation, last used timestamps
+#### 🎯 Dashboard Overview
+- **Real-time Statistics**: Live counts of polling places, precincts, elections, and assignments
+- **System Health**: Active API keys, data distribution analytics, upcoming elections
+- **Recent Activity**: Audit trail showing recent CREATE, UPDATE, DELETE operations
+- **Quick Actions**: One-click access to all major management functions
+- **Data Insights**: Top states and counties by polling place count
+
+#### 🗺️ Interactive Map Visualization
+- **Live Map**: Leaflet.js-powered interactive map with OpenStreetMap tiles
+- **Advanced Filtering**: State, county, and dataset filtering with real-time updates
+- **Detailed Popups**: Comprehensive polling place information on click
+- **Statistics Bar**: Dynamic counts of visible places, counties, and states
+- **Responsive Design**: Mobile-friendly map interface with touch support
+
+#### 📊 Record Management (Flask-Admin Integration)
+- **Full CRUD Operations**: Create, read, update, delete for all data models
+- **Advanced Search**: Global search across all fields with instant results
+- **Multi-criteria Filtering**: Complex filtering with date ranges and geographic filters
+- **Bulk Operations**: Mass edit and delete capabilities with safety confirmations
+- **Export Options**: Multiple format exports (CSV, Excel, JSON)
+- **Custom Styling**: Enhanced UI with consistent purple/blue theme
+
+#### 🔌 Plugin Management
+- **Plugin Discovery**: Automatic loading and status monitoring of all plugins
+- **Sync Operations**: Individual and bulk plugin synchronization
+- **Documentation Access**: Direct links to user guides and technical documentation
+- **File Upload**: Upload capability for compatible plugins
+- **Virginia Advanced Sync**: Specialized interface for Virginia plugin with file discovery
+
+#### ⚙️ System Configuration
+- **Geocoding Setup**: Configure multiple geocoding services (Census, Google, Mapbox)
+- **API Key Management**: Secure storage and validation of geocoding API keys
+- **Service Priority**: Customizable order of geocoding service usage
+- **Real-time Updates**: Immediate configuration changes
+
+#### 🗑️ Bulk Operations
+- **Safety-First Design**: Multi-step confirmation process with dry-run preview
+- **Advanced Filtering**: Filter by record type, geography, date ranges, and source plugin
+- **Large Deletion Protection**: Enhanced confirmation for operations affecting >1000 records
+- **Comprehensive Logging**: Detailed audit trail of all bulk operations
+
+#### 📋 Application Monitoring
+- **Live Log Viewing**: Real-time application log streaming with color-coded levels
+- **Searchable Interface**: Easy log scanning and filtering by severity
+- **Export Capabilities**: Download logs for external analysis
+- **Performance Monitoring**: System health and performance indicators
+
+#### 🔐 Security & User Management
+- **API Key Management**: Create, monitor, and revoke API keys with custom rate limits
+- **Usage Statistics**: Track API key usage and last access times
+- **Password Management**: Secure password change with strength validation
+- **Session Security**: Bcrypt password hashing and secure session handling
+
+### User Experience Features
+
+#### 🎨 Modern Design System
+- **Consistent Theme**: Purple/blue color scheme (#667eea) throughout interface
+- **Responsive Layout**: Mobile-first design with tablet and desktop optimizations
+- **Interactive Elements**: Hover effects, transitions, and micro-interactions
+- **Accessibility**: WCAG AA compliance with keyboard navigation and screen reader support
+
+#### ⚡ Performance Optimizations
+- **Fast Loading**: <2 second dashboard load times
+- **Lazy Loading**: On-demand data loading for large datasets
+- **Caching Strategy**: Browser and server-side caching for optimal performance
+- **AJAX Operations**: Asynchronous updates without page refreshes
+
+#### 🛡️ Security Features
+- **CSRF Protection**: Cross-site request forgery prevention
+- **Input Validation**: Comprehensive server-side validation
+- **Rate Limiting**: API endpoint protection with configurable limits
+- **Secure Headers**: Proper security headers implementation
+
+### Navigation Structure
+
+The admin interface is organized into intuitive sections:
+
+1. **Dashboard** (`/admin`) - System overview and quick actions
+2. **Edit Records** (`/admin/record/`) - Full CRUD operations via Flask-Admin
+3. **View Map** (`/admin/map`) - Interactive polling place visualization
+4. **Manage Plugins** (`/admin/plugins`) - Plugin synchronization and configuration
+5. **View Logs** (`/admin/logs`) - Application log monitoring
+6. **Geocoding Configuration** (`/admin/geocoding-config`) - Service setup and API keys
+7. **Bulk Operations** (`/admin/bulk-delete`) - Mass data management
+8. **Change Password** (`/admin/change-password`) - Security management
+
+### Browser Compatibility
+
+- **Modern Browsers**: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
+- **Mobile Support**: iOS Safari 14+, Chrome Mobile 90+
+- **Graceful Degradation**: Functional fallbacks for older browsers
+
+### Technical Implementation
+
+- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
+- **Frameworks**: Flask, Flask-Admin, Bootstrap 5
+- **Maps**: Leaflet.js with OpenStreetMap tiles
+- **Icons**: Font Awesome 6
+- **Styling**: Custom CSS framework with responsive grid system
+- **Security**: Session-based authentication with bcrypt hashing
 
 ## Authentication
 
@@ -577,8 +689,9 @@ State-specific plugins can pull data from various sources:
 
 Currently implemented plugins:
 - **Dummy Plugin**: Generates test data for all 50 US states
-- **Virginia Plugin**: Scrapes data from Virginia Department of Elections
-- **BigQuery Plugin**: Queries voter data from Google BigQuery (configurable for any state)
+- **Virginia Plugin**: Scrapes data from Virginia Department of Elections with multi-election support
+- **Ohio Plugin**: Fetches polling place and precinct data from Ohio's official CSV files
+- **BigQuery Plugin**: Queries voter registration data from Google BigQuery (configurable for any state)
 
 To add support for a new state, create a plugin following the guide in `plugins/README.md`.
 
@@ -644,6 +757,24 @@ Contributions are welcome! Please feel free to:
 - Use type hints where appropriate
 - Add docstrings to new functions and classes
 - Ensure all new code is covered by tests
+
+### Testing
+
+Run tests with:
+```bash
+python run_tests.py
+```
+
+Or use pytest directly:
+```bash
+pytest tests/
+```
+
+Test files are located in the `tests/` directory and include:
+- Plugin functionality tests
+- API endpoint tests
+- Database model tests
+- Integration tests for Virginia sync functionality
 
 ## License
 

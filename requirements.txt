@@ -34,3 +34,6 @@ beautifulsoup4==4.12.3
 
 # Database administration
 Flask-Admin==1.6.1
+
+# Documentation rendering
+Markdown==3.5.1
