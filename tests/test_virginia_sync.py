@@ -762,7 +762,7 @@ class TestVirginiaGeocoding(unittest.TestCase):
         # Mock Census response
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.text = "id,street,city,state,zip,match,match_type,tiger_line_id,tiger_side,longitude,latitude\nVA-TEST-PP-001,123 Main St,Test City,VA,12345,Match,Exact,123456,L,-77.0365,38.8977"
+        mock_response.text = "id,street,city,state,zip,match,match_type,tiger_line_id,tiger_side,longitude,latitude\nVA-TEST-PP-001,123 Main St,Test City,VA,12345,Match,Exact,123456,-77.0365,38.8977"
         mock_post.return_value = mock_response
         
         polling_places = [{
@@ -772,7 +772,7 @@ class TestVirginiaGeocoding(unittest.TestCase):
             'zip_code': '12345'
         }]
         
-        self.plugin._geocode_census(polling_places)
+        self.plugin._geocode_census(polling_places, progress_callback=None, cancel_check=None)
         
         self.assertEqual(polling_places[0]['latitude'], 38.8977)
         self.assertEqual(polling_places[0]['longitude'], -77.0365)

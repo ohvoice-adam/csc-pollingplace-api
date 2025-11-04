@@ -282,6 +282,88 @@
             transition: width 0.3s ease;
             width: 0%;
         }
+        
+        /* Geocoding Progress Styles */
+        .geocoding-progress {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #dee2e6;
+        }
+        .geocoding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .geocoding-title {
+            font-weight: 600;
+            color: #495057;
+        }
+        .geocoding-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 10px 0;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+        .time-tracking {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            margin: 10px 0;
+            border: 1px solid #e9ecef;
+        }
+        .time-item {
+            text-align: center;
+        }
+        .time-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #495057;
+        }
+        .time-label {
+            font-size: 11px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        .cancel-button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .cancel-button:hover {
+            background: #c82333;
+        }
+        .cancel-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
         .progress-phases {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -643,6 +725,52 @@
                         <!-- Phases will be dynamically added here -->
                     </div>
                     <div id="current-status" style="margin-top: 15px; font-size: 14px; color: #666;" aria-live="polite" aria-atomic="true"></div>
+                    
+                    <!-- Geocoding Progress Section -->
+                    <div class="geocoding-progress" id="geocoding-progress" style="display: none;">
+                        <div class="geocoding-header">
+                            <div class="geocoding-title">Geocoding Progress</div>
+                            <button type="button" id="cancel-geocoding" class="cancel-button">Cancel Geocoding</button>
+                        </div>
+                        
+                        <div class="geocoding-stats">
+                            <div class="stat-item">
+                                <div class="stat-value" id="geocoded-count">0</div>
+                                <div class="stat-label">Geocoded</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="failed-count">0</div>
+                                <div class="stat-label">Failed</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="skipped-count">0</div>
+                                <div class="stat-label">Skipped</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="current-geocoder">-</div>
+                                <div class="stat-label">Current Service</div>
+                            </div>
+                        </div>
+                        
+                        <div class="time-tracking">
+                            <div class="time-item">
+                                <div class="time-value" id="elapsed-time">0:00</div>
+                                <div class="time-label">Time Elapsed</div>
+                            </div>
+                            <div class="time-item">
+                                <div class="time-value" id="estimated-remaining">--:--</div>
+                                <div class="time-label">Est. Remaining</div>
+                            </div>
+                            <div class="time-item">
+                                <div class="time-value" id="processing-rate">0/min</div>
+                                <div class="time-label">Processing Rate</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 10px; font-size: 13px; color: #666;" id="geocoding-message">
+                            Preparing geocoding...
+                        </div>
+                    </div>
                 </section>
 
                 <!-- Error Reporting Section -->
@@ -707,6 +835,18 @@
             const loadingOverlay = document.getElementById('loading-overlay');
             const syncHistoryContainer = document.getElementById('sync-history-container');
             
+            // Geocoding progress elements
+            const geocodingProgress = document.getElementById('geocoding-progress');
+            const cancelGeocodingBtn = document.getElementById('cancel-geocoding');
+            const geocodedCount = document.getElementById('geocoded-count');
+            const failedCount = document.getElementById('failed-count');
+            const skippedCount = document.getElementById('skipped-count');
+            const currentGeocoder = document.getElementById('current-geocoder');
+            const elapsedTime = document.getElementById('elapsed-time');
+            const estimatedRemaining = document.getElementById('estimated-remaining');
+            const processingRate = document.getElementById('processing-rate');
+            const geocodingMessage = document.getElementById('geocoding-message');
+            
             // Sync state management
             let syncState = {
                 isRunning: false,
@@ -715,6 +855,21 @@
                 errors: [],
                 retryCount: 0,
                 maxRetries: 3
+            };
+            
+            // Geocoding state management
+            let geocodingState = {
+                isRunning: false,
+                jobId: null,
+                startTime: null,
+                progressInterval: null,
+                totalPlaces: 0,
+                processedPlaces: 0,
+                results: {
+                    geocoded: 0,
+                    failed: 0,
+                    skipped: 0
+                }
             };
 
             // Select all functionality
@@ -793,6 +948,86 @@
                 });
                 
                 renderProgressPhases();
+            }
+            
+            // Enhanced sync with geocoding integration
+            function startSyncWithGeocoding(selectedFiles) {
+                // Initialize sync state
+                syncState.isRunning = true;
+                syncState.errors = [];
+                syncState.retryCount = 0;
+                initializeSyncPhases(selectedFiles);
+
+                // Show progress UI
+                progressContainer.style.display = 'block';
+                results.style.display = 'none';
+                errorReporting.style.display = 'none';
+                syncBtn.disabled = true;
+                syncBtn.textContent = 'Syncing...';
+
+                // Start the sync process
+                simulateSyncProgress(selectedFiles);
+
+                // Prepare form data
+                const formData = new FormData(syncForm);
+                
+                // Submit via AJAX
+                fetch('{{ url_for("admin_virginia_sync_post") }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    syncState.isRunning = false;
+                    
+                    if (data.success) {
+                        // Extract polling place IDs that need geocoding
+                        const pollingPlaceIds = extractPollingPlaceIdsForGeocoding(data.results);
+                        
+                        if (pollingPlaceIds.length > 0) {
+                            // Start geocoding with progress tracking
+                            updateProgress('geocoding', 'active', 0, 'Starting geocoding for new addresses...');
+                            startGeocodingProgress(pollingPlaceIds);
+                        } else {
+                            // No geocoding needed, complete sync
+                            progressContainer.style.display = 'none';
+                            results.style.display = 'block';
+                            displayResults(data.results);
+                            loadSyncHistory();
+                        }
+                    } else {
+                        progressContainer.style.display = 'none';
+                        results.style.display = 'block';
+                        resultsContent.innerHTML = `
+                            <div class="result-item result-error">
+                                <div class="result-title">Sync Failed</div>
+                                <div class="result-details">${data.error}</div>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    syncState.isRunning = false;
+                    progressContainer.style.display = 'none';
+                    results.style.display = 'block';
+                    resultsContent.innerHTML = `
+                        <div class="result-item result-error">
+                            <div class="result-title">Network Error</div>
+                            <div class="result-details">${error.message}</div>
+                        </div>
+                    `;
+                })
+                .finally(() => {
+                    syncBtn.disabled = false;
+                    syncBtn.textContent = 'Sync Selected Files';
+                });
+            }
+            
+            function extractPollingPlaceIdsForGeocoding(syncResults) {
+                // This would need to be implemented based on the sync response format
+                // For now, return empty array - this would need actual polling place IDs
+                // that need geocoding from the sync results
+                return [];
             }
             
             // Render progress phases
@@ -928,65 +1163,10 @@
 
                 if (hasError) return;
 
-                // Initialize sync state
-                syncState.isRunning = true;
-                syncState.errors = [];
-                syncState.retryCount = 0;
-                
                 const selectedFiles = Array.from(selectedCheckboxes).map(cb => cb.value);
-                initializeSyncPhases(selectedFiles);
-
-                // Show progress UI
-                progressContainer.style.display = 'block';
-                results.style.display = 'none';
-                errorReporting.style.display = 'none';
-                syncBtn.disabled = true;
-                syncBtn.textContent = 'Syncing...';
-
-                // Start progress simulation
-                simulateSyncProgress(selectedFiles);
-
-                // Prepare form data
-                const formData = new FormData(syncForm);
                 
-                // Submit via AJAX with progress tracking
-                fetch('{{ url_for("admin_virginia_sync_post") }}', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    syncState.isRunning = false;
-                    progressContainer.style.display = 'none';
-                    results.style.display = 'block';
-                    
-                    if (data.success) {
-                        displayResults(data.results);
-                        loadSyncHistory(); // Refresh history after successful sync
-                    } else {
-                        resultsContent.innerHTML = `
-                            <div class="result-item result-error">
-                                <div class="result-title">Sync Failed</div>
-                                <div class="result-details">${data.error}</div>
-                            </div>
-                        `;
-                    }
-                })
-                .catch(error => {
-                    syncState.isRunning = false;
-                    progressContainer.style.display = 'none';
-                    results.style.display = 'block';
-                    resultsContent.innerHTML = `
-                        <div class="result-item result-error">
-                            <div class="result-title">Network Error</div>
-                            <div class="result-details">${error.message}</div>
-                        </div>
-                    `;
-                })
-                .finally(() => {
-                    syncBtn.disabled = false;
-                    syncBtn.textContent = 'Sync Selected Files';
-                });
+                // Use enhanced sync with geocoding integration
+                startSyncWithGeocoding(selectedFiles);
             });
             
             // Simulate sync progress (in real implementation, this would be driven by server-side events)
@@ -1412,6 +1592,176 @@
                     }
                 };
             }
+            
+            // Geocoding progress functions
+            function startGeocodingProgress(pollingPlaceIds) {
+                geocodingState.isRunning = true;
+                geocodingState.startTime = Date.now();
+                geocodingState.totalPlaces = pollingPlaceIds.length;
+                
+                // Show geocoding progress UI
+                geocodingProgress.style.display = 'block';
+                cancelGeocodingBtn.disabled = false;
+                
+                // Start geocoding job
+                fetch('/admin/api/geocode-start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        plugin: 'virginia',
+                        polling_place_ids: pollingPlaceIds
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        geocodingState.jobId = data.job_id;
+                        geocodingState.totalPlaces = data.total_places;
+                        
+                        // Start polling for progress updates
+                        geocodingState.progressInterval = setInterval(pollGeocodingProgress, 1000);
+                    } else {
+                        showNotification(`Failed to start geocoding: ${data.error}`, 'error');
+                        stopGeocodingProgress();
+                    }
+                })
+                .catch(error => {
+                    showNotification(`Network error starting geocoding: ${error.message}`, 'error');
+                    stopGeocodingProgress();
+                });
+            }
+            
+            function pollGeocodingProgress() {
+                if (!geocodingState.jobId) return;
+                
+                fetch(`/admin/api/geocode-status/${geocodingState.jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateGeocodingUI(data);
+                        
+                        // Stop polling if job is complete
+                        if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled') {
+                            stopGeocodingProgress();
+                            
+                            if (data.status === 'completed') {
+                                showNotification(`Geocoding completed: ${data.results.geocoded} geocoded, ${data.results.skipped} skipped, ${data.results.failed} failed`, 'success');
+                            } else if (data.status === 'error') {
+                                showNotification(`Geocoding failed: ${data.message}`, 'error');
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling geocoding progress:', error);
+                });
+            }
+            
+            function updateGeocodingUI(data) {
+                // Update counts
+                geocodedCount.textContent = data.results.geocoded || 0;
+                failedCount.textContent = data.results.failed || 0;
+                skippedCount.textContent = data.results.skipped || 0;
+                
+                // Update current geocoder
+                const geocoderName = data.current_phase ? 
+                    data.current_phase.replace('geocoding_', '').charAt(0).toUpperCase() + 
+                    data.current_phase.replace('geocoding_', '').slice(1) : '-';
+                currentGeocoder.textContent = geocoderName;
+                
+                // Update message
+                geocodingMessage.textContent = data.message || 'Processing...';
+                
+                // Update time tracking
+                const elapsed = data.elapsed_time || 0;
+                elapsedTime.textContent = formatTime(elapsed);
+                
+                if (data.estimated_remaining_time !== undefined) {
+                    estimatedRemaining.textContent = formatTime(data.estimated_remaining_time);
+                }
+                
+                // Calculate processing rate
+                if (data.processed_places > 0 && elapsed > 0) {
+                    const rate = Math.round(data.processed_places / (elapsed / 60));
+                    processingRate.textContent = `${rate}/min`;
+                }
+                
+                // Update progress bar if this is part of overall sync
+                if (syncState.isRunning) {
+                    const geocodingPhase = syncState.phases.find(p => p.id === 'geocoding');
+                    if (geocodingPhase) {
+                        geocodingPhase.progress = data.progress || 0;
+                        if (data.status === 'running') {
+                            geocodingPhase.status = 'active';
+                        } else if (data.status === 'completed') {
+                            geocodingPhase.status = 'completed';
+                        } else if (data.status === 'error') {
+                            geocodingPhase.status = 'error';
+                        }
+                        renderProgressPhases();
+                        updateOverallProgress();
+                    }
+                }
+            }
+            
+            function stopGeocodingProgress() {
+                geocodingState.isRunning = false;
+                
+                if (geocodingState.progressInterval) {
+                    clearInterval(geocodingState.progressInterval);
+                    geocodingState.progressInterval = null;
+                }
+                
+                cancelGeocodingBtn.disabled = true;
+                
+                // Hide geocoding progress after a delay
+                setTimeout(() => {
+                    if (!geocodingState.isRunning) {
+                        geocodingProgress.style.display = 'none';
+                    }
+                }, 3000);
+            }
+            
+            function cancelGeocoding() {
+                if (!geocodingState.jobId || !geocodingState.isRunning) return;
+                
+                if (confirm('Are you sure you want to cancel the geocoding process?')) {
+                    fetch(`/admin/api/geocode-cancel/${geocodingState.jobId}`, {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showNotification('Geocoding cancelled', 'info');
+                            stopGeocodingProgress();
+                        } else {
+                            showNotification(`Failed to cancel geocoding: ${data.error}`, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        showNotification(`Error cancelling geocoding: ${error.message}`, 'error');
+                    });
+                }
+            }
+            
+            function formatTime(seconds) {
+                if (seconds < 60) {
+                    return `0:${Math.floor(seconds).toString().padStart(2, '0')}`;
+                } else if (seconds < 3600) {
+                    const minutes = Math.floor(seconds / 60);
+                    const secs = Math.floor(seconds % 60);
+                    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+                } else {
+                    const hours = Math.floor(seconds / 3600);
+                    const minutes = Math.floor((seconds % 3600) / 60);
+                    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            // Add cancel button event listener
+            cancelGeocodingBtn.addEventListener('click', cancelGeocoding);
             
             // Initialize
             updateSyncButton();

@@ -11,6 +11,8 @@ import json
 import secrets
 import bcrypt
 import logging
+import time
+import threading
 from datetime import datetime
 from functools import wraps
 from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session
@@ -1849,6 +1851,208 @@ def admin_geocoding_api_config():
                           google_key=google_key,
                           mapbox_token=mapbox_token)
 
+# Geocoding progress tracking
+geocoding_jobs = {}
+
+@app.route('/admin/api/geocode-start', methods=['POST'])
+@login_required
+def admin_api_geocode_start():
+    """Start geocoding with progress tracking"""
+    try:
+        data = request.get_json()
+        plugin_name = data.get('plugin', 'virginia')
+        polling_place_ids = data.get('polling_place_ids', [])
+        
+        if not polling_place_ids:
+            return jsonify({'success': False, 'error': 'No polling places specified'}), 400
+        
+        # Generate unique job ID
+        job_id = secrets.token_hex(8)
+        
+        # Get plugin instance
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'success': False, 'error': f'Plugin {plugin_name} not found'}), 404
+        
+        # Get polling places from database
+        from models import PollingPlace
+        polling_places = PollingPlace.query.filter(
+            PollingPlace.id.in_(polling_place_ids)
+        ).all()
+        
+        if not polling_places:
+            return jsonify({'success': False, 'error': 'No polling places found'}), 404
+        
+        # Convert to list of dictionaries for geocoding
+        polling_places_data = []
+        for pp in polling_places:
+            polling_places_data.append({
+                'id': pp.id,
+                'address_line1': pp.address_line1,
+                'city': pp.city,
+                'zip_code': pp.zip_code,
+                'latitude': pp.latitude,
+                'longitude': pp.longitude
+            })
+        
+        # Initialize job state
+        geocoding_jobs[job_id] = {
+            'status': 'running',
+            'progress': 0,
+            'message': 'Starting geocoding...',
+            'start_time': time.time(),
+            'cancelled': False,
+            'total_places': len(polling_places_data),
+            'processed_places': 0,
+            'current_phase': 'initializing',
+            'results': {
+                'geocoded': 0,
+                'failed': 0,
+                'skipped': 0
+            }
+        }
+        
+        # Start geocoding in background thread
+        def geocode_worker():
+            try:
+                # Progress callback function
+                def progress_callback(progress_data):
+                    if job_id not in geocoding_jobs:
+                        return
+                    
+                    job = geocoding_jobs[job_id]
+                    if job['cancelled']:
+                        return
+                    
+                    # Update job state with progress data
+                    job['current_phase'] = progress_data.get('phase', 'unknown')
+                    job['message'] = progress_data.get('message', 'Processing...')
+                    
+                    if 'geocoder_progress' in progress_data:
+                        job['progress'] = progress_data['geocoder_progress']
+                    
+                    if 'current_address' in progress_data and 'total_addresses' in progress_data:
+                        job['processed_places'] = progress_data['current_address']
+                        job['total_places'] = progress_data['total_addresses']
+                
+                # Cancel check function
+                def cancel_check():
+                    return job_id not in geocoding_jobs or geocoding_jobs[job_id]['cancelled']
+                
+                # Perform geocoding with progress tracking
+                plugin._geocode_addresses(
+                    polling_places_data,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check
+                )
+                
+                # Update database with geocoded results
+                geocoded_count = 0
+                failed_count = 0
+                skipped_count = 0
+                
+                for pp_data in polling_places_data:
+                    pp = next((p for p in polling_places if p.id == pp_data['id']), None)
+                    if pp:
+                        if 'latitude' in pp_data and 'longitude' in pp_data:
+                            pp.latitude = pp_data['latitude']
+                            pp.longitude = pp_data['longitude']
+                            geocoded_count += 1
+                        elif pp.latitude and pp.longitude:
+                            skipped_count += 1  # Already had coordinates
+                        else:
+                            failed_count += 1
+                
+                # Commit changes to database
+                db.session.commit()
+                
+                # Update final job state
+                if job_id in geocoding_jobs:
+                    job = geocoding_jobs[job_id]
+                    if not job['cancelled']:
+                        job['status'] = 'completed'
+                        job['progress'] = 100
+                        job['message'] = f'Geocoding completed: {geocoded_count} geocoded, {skipped_count} skipped, {failed_count} failed'
+                        job['results'] = {
+                            'geocoded': geocoded_count,
+                            'failed': failed_count,
+                            'skipped': skipped_count
+                        }
+                
+            except Exception as e:
+                app.logger.error(f"Geocoding job {job_id} failed: {str(e)}")
+                if job_id in geocoding_jobs:
+                    geocoding_jobs[job_id]['status'] = 'error'
+                    geocoding_jobs[job_id]['message'] = f'Error: {str(e)}'
+        
+        # Start background thread
+        thread = threading.Thread(target=geocode_worker)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'total_places': len(polling_places_data)
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error starting geocoding: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/admin/api/geocode-status/<job_id>')
+@login_required
+def admin_api_geocode_status(job_id):
+    """Get geocoding job status"""
+    if job_id not in geocoding_jobs:
+        return jsonify({'success': False, 'error': 'Job not found'}), 404
+    
+    job = geocoding_jobs[job_id]
+    
+    # Calculate time tracking
+    current_time = time.time()
+    elapsed_time = current_time - job['start_time']
+    
+    response_data = {
+        'success': True,
+        'job_id': job_id,
+        'status': job['status'],
+        'progress': job['progress'],
+        'message': job['message'],
+        'current_phase': job['current_phase'],
+        'elapsed_time': elapsed_time,
+        'processed_places': job['processed_places'],
+        'total_places': job['total_places'],
+        'results': job['results']
+    }
+    
+    # Estimate time remaining
+    if job['status'] == 'running' and job['progress'] > 0:
+        estimated_total_time = elapsed_time / (job['progress'] / 100)
+        remaining_time = estimated_total_time - elapsed_time
+        response_data['estimated_remaining_time'] = max(0, remaining_time)
+    
+    return jsonify(response_data)
+
+@app.route('/admin/api/geocode-cancel/<job_id>', methods=['POST'])
+@login_required
+def admin_api_geocode_cancel(job_id):
+    """Cancel geocoding job"""
+    if job_id not in geocoding_jobs:
+        return jsonify({'success': False, 'error': 'Job not found'}), 404
+    
+    job = geocoding_jobs[job_id]
+    if job['status'] in ['completed', 'error']:
+        return jsonify({'success': False, 'error': 'Job already finished'}), 400
+    
+    job['cancelled'] = True
+    job['status'] = 'cancelled'
+    job['message'] = 'Geocoding cancelled by user'
+    
+    return jsonify({
+        'success': True,
+        'message': 'Geocoding job cancelled'
+    })
 
 # Scheduling functions
 def sync_all_plugins_job():

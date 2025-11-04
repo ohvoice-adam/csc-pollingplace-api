@@ -11,7 +11,7 @@ import os
 import requests
 import time
 import pandas as pd
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import quote, urljoin
@@ -409,12 +409,16 @@ class VirginiaPlugin(BasePlugin):
 
         return (list(polling_places.values()), precincts)
 
-    def _geocode_addresses(self, polling_places: List[Dict[str, Any]]) -> None:
+    def _geocode_addresses(self, polling_places: List[Dict[str, Any]], 
+                           progress_callback: Optional[Callable] = None,
+                           cancel_check: Optional[Callable] = None) -> None:
         """
         Geocode the polling places using multiple APIs: Census, Google, Mapbox.
 
         Args:
             polling_places: List of polling place dictionaries to update with lat/lng
+            progress_callback: Optional callback function for progress updates
+            cancel_check: Optional function to check if operation should be cancelled
         """
         if not polling_places:
             return
@@ -440,34 +444,81 @@ class VirginiaPlugin(BasePlugin):
 
         # Try geocoders in priority order
         geocoder_priority = self.app.config.get('geocoder_priority', ['Mapbox', 'Census', 'Google'])
-        for geocoder in geocoder_priority:
+        total_geocoders = len(geocoder_priority)
+        
+        for geocoder_index, geocoder in enumerate(geocoder_priority):
+            # Check for cancellation
+            if cancel_check and cancel_check():
+                self.app.logger.info("Geocoding cancelled by user")
+                return
+                
             failed_places = [pp for pp in polling_places if 'latitude' not in pp]
             if not failed_places:
                 break
 
             self.app.logger.info(f"Attempting {geocoder} geocoding for {len(failed_places)} addresses")
+            
+            # Update progress for starting new geocoder
+            if progress_callback:
+                progress_callback({
+                    'phase': f'geocoding_{geocoder.lower()}',
+                    'message': f'Using {geocoder} geocoder for {len(failed_places)} addresses',
+                    'current': geocoder_index,
+                    'total': total_geocoders,
+                    'geocoder_progress': 0
+                })
+            
             if geocoder == 'Census':
-                self._geocode_census(failed_places)
+                self._geocode_census(failed_places, progress_callback, cancel_check)
             elif geocoder == 'Google':
-                self._geocode_google(failed_places)
+                self._geocode_google(failed_places, progress_callback, cancel_check)
             elif geocoder == 'Mapbox':
-                self._geocode_mapbox(failed_places)
+                self._geocode_mapbox(failed_places, progress_callback, cancel_check)
             else:
                 self.app.logger.warning(f"Unknown geocoder: {geocoder}")
 
         # Final status
         geocoded = [pp for pp in polling_places if 'latitude' in pp]
         self.app.logger.info(f"Geocoding complete: {len(geocoded)}/{len(polling_places)} addresses geocoded")
+        
+        if progress_callback:
+            progress_callback({
+                'phase': 'geocoding_complete',
+                'message': f'Geocoding complete: {len(geocoded)}/{len(polling_places)} addresses geocoded',
+                'current': total_geocoders,
+                'total': total_geocoders,
+                'geocoder_progress': 100
+            })
 
-    def _geocode_census(self, polling_places: List[Dict[str, Any]]) -> None:
+    def _geocode_census(self, polling_places: List[Dict[str, Any]], 
+                        progress_callback: Optional[Callable] = None,
+                        cancel_check: Optional[Callable] = None) -> None:
         """Geocode using Census API"""
+        # Check for cancellation before starting
+        if cancel_check and cancel_check():
+            return
+            
         # Prepare CSV data
         csv_data = "id,street,city,state,zip\n"
-        for pp in polling_places:
+        for i, pp in enumerate(polling_places):
+            # Check for cancellation during CSV preparation
+            if cancel_check and cancel_check():
+                return
+                
             normalized_addr = ' '.join((pp['address_line1'] or '').strip().split())
             normalized_city = ' '.join((pp['city'] or '').strip().split())
             csv_data += f"{pp['id']},{normalized_addr},{normalized_city},VA,{pp['zip_code']}\n"
             self.app.logger.debug(f"Census input: {pp['id']} - {normalized_addr}, {normalized_city}, VA {pp['zip_code']}")
+            
+            # Update progress during CSV preparation
+            if progress_callback and i % 10 == 0:  # Update every 10 addresses
+                progress_callback({
+                    'phase': 'geocoding_census',
+                    'message': f'Preparing Census request ({i+1}/{len(polling_places)})',
+                    'geocoder_progress': 10,
+                    'current_address': i + 1,
+                    'total_addresses': len(polling_places)
+                })
 
         url = "https://geocoding.geo.census.gov/geocoder/locations/addressbatch"
         files = {'addressFile': ('addresses.csv', csv_data, 'text/csv')}
@@ -479,8 +530,20 @@ class VirginiaPlugin(BasePlugin):
         response = None
         max_retries = 3
         for attempt in range(max_retries):
+            # Check for cancellation before each attempt
+            if cancel_check and cancel_check():
+                return
+                
             try:
                 self.app.logger.info(f"Census geocoding {len(polling_places)} addresses (attempt {attempt + 1})")
+                
+                if progress_callback:
+                    progress_callback({
+                        'phase': 'geocoding_census',
+                        'message': f'Submitting Census request (attempt {attempt + 1})',
+                        'geocoder_progress': 30
+                    })
+                    
                 response = requests.post(url, files=files, data=data, timeout=60)
 
                 if response.status_code == 200:
@@ -488,6 +551,12 @@ class VirginiaPlugin(BasePlugin):
                     break
                 elif response.status_code == 500 and attempt < max_retries - 1:
                     self.app.logger.warning(f"Census geocoding failed with 500, retrying in 5 seconds...")
+                    if progress_callback:
+                        progress_callback({
+                            'phase': 'geocoding_census',
+                            'message': f'Retrying in 5 seconds... (attempt {attempt + 1})',
+                            'geocoder_progress': 25
+                        })
                     time.sleep(5)
                     continue
                 else:
@@ -503,21 +572,41 @@ class VirginiaPlugin(BasePlugin):
                     return
 
         if response and response.status_code == 200:
+            if progress_callback:
+                progress_callback({
+                    'phase': 'geocoding_census',
+                    'message': 'Processing Census response...',
+                    'geocoder_progress': 60
+                })
+                
             lines = response.text.strip().split('\n')
             self.app.logger.info(f"Census response has {len(lines)} lines")
-            for line in lines[1:]:
+            
+            processed_count = 0
+            for line_num, line in enumerate(lines[1:]):
+                # Check for cancellation during response processing
+                if cancel_check and cancel_check():
+                    return
+                    
                 if not line.strip():
                     continue
                 parts = line.split(',')
-                if len(parts) < 12:
+                if len(parts) < 10:
                     self.app.logger.debug(f"Skipping line with {len(parts)} parts: {line}")
                     continue
                 pp_id = parts[0]
                 match = parts[6]
-                lat = parts[11]
-                lon = parts[10]
+                # Adjust indices based on actual CSV format
+                if len(parts) == 10:
+                    # Format: id,street,city,state,zip,match,match_type,tiger_line_id,tiger_side,longitude,latitude
+                    lon = parts[8]
+                    lat = parts[9]
+                else:
+                    # Original format with more columns
+                    lon = parts[10]
+                    lat = parts[11]
 
-                if match == 'Match' and lat and lon:
+                if match in ['Match', 'Exact'] and lat and lon:
                     for pp in polling_places:
                         if pp['id'] == pp_id:
                             pp['latitude'] = float(lat)
@@ -531,18 +620,53 @@ class VirginiaPlugin(BasePlugin):
                             normalized_city = ' '.join((pp['city'] or '').strip().split())
                             self.app.logger.warning(f"Census geocoding failed for {pp_id}: {normalized_addr}, {normalized_city}, VA {pp['zip_code']}")
                             break
+                            
+                processed_count += 1
+                
+                # Update progress during response processing
+                if progress_callback and processed_count % 10 == 0:
+                    progress_percentage = 60 + (processed_count / len(lines) * 30)
+                    progress_callback({
+                        'phase': 'geocoding_census',
+                        'message': f'Processing Census results ({processed_count}/{len(lines)-1})',
+                        'geocoder_progress': progress_percentage,
+                        'current_address': processed_count,
+                        'total_addresses': len(lines) - 1
+                    })
 
-    def _geocode_google(self, polling_places: List[Dict[str, Any]]) -> None:
+    def _geocode_google(self, polling_places: List[Dict[str, Any]], 
+                        progress_callback: Optional[Callable] = None,
+                        cancel_check: Optional[Callable] = None) -> None:
         """Geocode using Google API"""
+        # Check for cancellation before starting
+        if cancel_check and cancel_check():
+            return
+            
         api_key = os.getenv('GOOGLE_GEOCODING_API_KEY')
         if not api_key:
             self.app.logger.warning("Google API key not set, skipping Google geocoding")
             return
 
         self.app.logger.info(f"Starting Google geocoding for {len(polling_places)} addresses")
-        for pp in polling_places:
+        
+        for i, pp in enumerate(polling_places):
+            # Check for cancellation during processing
+            if cancel_check and cancel_check():
+                return
+                
             address = f"{pp['address_line1'] or ''}, {pp['city'] or ''}, VA {pp['zip_code'] or ''}"
             url = f"https://maps.googleapis.com/maps/api/geocode/json?address={quote(address)}&key={api_key}"
+
+            # Update progress
+            if progress_callback and i % 5 == 0:  # Update every 5 addresses
+                progress_percentage = 30 + (i / len(polling_places) * 70)
+                progress_callback({
+                    'phase': 'geocoding_google',
+                    'message': f'Geocoding with Google API ({i+1}/{len(polling_places)})',
+                    'geocoder_progress': progress_percentage,
+                    'current_address': i + 1,
+                    'total_addresses': len(polling_places)
+                })
 
             try:
                 self.app.logger.debug(f"Google request for {pp['id']}: {address}")
@@ -563,17 +687,39 @@ class VirginiaPlugin(BasePlugin):
 
             time.sleep(0.1)  # Rate limit
 
-    def _geocode_mapbox(self, polling_places: List[Dict[str, Any]]) -> None:
+    def _geocode_mapbox(self, polling_places: List[Dict[str, Any]], 
+                        progress_callback: Optional[Callable] = None,
+                        cancel_check: Optional[Callable] = None) -> None:
         """Geocode using Mapbox API"""
+        # Check for cancellation before starting
+        if cancel_check and cancel_check():
+            return
+            
         access_token = os.getenv('MAPBOX_ACCESS_TOKEN')
         if not access_token:
             self.app.logger.warning("Mapbox access token not set, skipping Mapbox geocoding")
             return
 
         self.app.logger.info(f"Starting Mapbox geocoding for {len(polling_places)} addresses")
-        for pp in polling_places:
+        
+        for i, pp in enumerate(polling_places):
+            # Check for cancellation during processing
+            if cancel_check and cancel_check():
+                return
+                
             address = f"{pp['address_line1'] or ''}, {pp['city'] or ''}, VA {pp['zip_code'] or ''}"
             url = f"https://api.mapbox.com/search/geocode/v6/forward?q={quote(address)}&permanent=false&access_token={access_token}"
+
+            # Update progress
+            if progress_callback and i % 5 == 0:  # Update every 5 addresses
+                progress_percentage = 30 + (i / len(polling_places) * 70)
+                progress_callback({
+                    'phase': 'geocoding_mapbox',
+                    'message': f'Geocoding with Mapbox API ({i+1}/{len(polling_places)})',
+                    'geocoder_progress': progress_percentage,
+                    'current_address': i + 1,
+                    'total_addresses': len(polling_places)
+                })
 
             try:
                 self.app.logger.debug(f"Mapbox request for {pp['id']}: {address}")
