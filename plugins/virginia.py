@@ -52,6 +52,8 @@ class VirginiaPlugin(BasePlugin):
         # Remove common suffixes
         locality = str(locality).upper().strip()
         locality = locality.replace(' COUNTY', '').replace(' CITY', '')
+        # Remove content in parentheses first
+        locality = re.sub(r'\s*\([^)]*\)', '', locality)
         # Remove special characters, keep only letters and numbers
         locality = re.sub(r'[^A-Z0-9]', '', locality)
         return locality
@@ -221,19 +223,15 @@ class VirginiaPlugin(BasePlugin):
             month_match = re.search(r'(January|February|March|April|May|June|July|August|September|October|November|December)', base_name, re.IGNORECASE)
             month_name = month_match.group(1) if month_match else 'November'
             
-            # Generate election date (use file_date if available, otherwise estimate)
-            if file_date:
-                election_date = file_date
+            # Generate election date (always estimate based on election type, file_date is just for reference)
+            if election_type == 'general':
+                election_date = f"{year}-11-05"  # First Tuesday after first Monday in November
+            elif election_type == 'presidential_primary':
+                election_date = f"{year}-03-05"  # Super Tuesday
+            elif election_type == 'party_primary':
+                election_date = f"{year}-06-18"  # Typical June primary
             else:
-                # Estimate based on election type and month
-                if election_type == 'general':
-                    election_date = f"{year}-11-05"  # First Tuesday after first Monday in November
-                elif election_type == 'presidential_primary':
-                    election_date = f"{year}-03-05"  # Super Tuesday
-                elif election_type == 'party_primary':
-                    election_date = f"{year}-06-18"  # Typical June primary
-                else:
-                    election_date = f"{year}-11-05"  # Default to November
+                election_date = f"{year}-11-05"  # Default to November
             
             # Generate election name
             election_name = self._generate_election_name_from_metadata(election_date, election_type)
@@ -350,6 +348,15 @@ class VirginiaPlugin(BasePlugin):
         Returns:
             Tuple of (polling_places_dict, precincts_list)
         """
+        # Validate required columns are present
+        required_columns = [
+            'Locality Name', 'Voting Precinct Name', 'Location', 
+            'Address Line 1', 'City', 'Zip Code'
+        ]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise KeyError(f"Missing required columns: {missing_columns}")
+
         polling_places = {}  # Key: (locality, location, address) -> polling_place_data
         precincts = []
         polling_place_counter = {}  # Track sequence per locality
@@ -366,6 +373,14 @@ class VirginiaPlugin(BasePlugin):
                 address2 = str(row['Address Line 2']).strip() if str(row['Address Line 2']) != 'nan' else None
                 city = str(row['City']).strip() if str(row['City']) != 'nan' else ''
                 zip_code = str(row['Zip Code']).strip() if str(row['Zip Code']) != 'nan' else ''
+
+                # Validate critical fields - skip rows with missing essential data
+                if (not locality_name or locality_name == 'nan' or 
+                    not precinct_name or precinct_name == 'nan' or 
+                    not location or location == 'nan' or 
+                    not address1 or address1 == 'nan'):
+                    self.app.logger.warning(f"Skipping row {idx} due to missing critical data")
+                    continue
 
                 # Create unique key for polling place
                 polling_place_key = (locality_short, location, address1, city)
@@ -861,41 +876,51 @@ class VirginiaPlugin(BasePlugin):
         from app import Election
         from sqlalchemy.exc import IntegrityError
 
-        # Check if election already exists
-        election = Election.query.filter_by(date=election_date, state=self.state_code).first()
+        # Ensure we're in an app context (only for real Flask apps, not mocks)
+        app_context = None
+        if hasattr(self.app, 'app_context') and hasattr(self.app.app_context(), '__enter__'):
+            app_context = self.app.app_context()
+            app_context.__enter__()
+        
+        try:
+            # Check if election already exists
+            election = Election.query.filter_by(date=election_date, state=self.state_code).first()
 
-        if not election:
-            # Enhanced election name generation if we have URL or filename
-            if url or filename:
-                enhanced_name = self._parse_election_metadata_from_source(url, filename, election_date)
-                if enhanced_name:
-                    election_name = enhanced_name
+            if not election:
+                # Enhanced election name generation if we have URL or filename
+                if url or filename:
+                    enhanced_name = self._parse_election_metadata_from_source(url, filename, election_date)
+                    if enhanced_name:
+                        election_name = enhanced_name
 
-            # Validate election data before creation
-            if not self._validate_election_data(election_date, election_name):
-                raise ValueError(f"Invalid election data: date={election_date}, name={election_name}")
+                # Validate election data before creation
+                if not self._validate_election_data(election_date, election_name):
+                    raise ValueError(f"Invalid election data: date={election_date}, name={election_name}")
 
-            # Create new election record with error handling for duplicates
-            try:
-                election = Election(
-                    date=election_date,
-                    name=election_name,
-                    state=self.state_code
-                )
-                self.db.session.add(election)
-                self.db.session.commit()
-                self.app.logger.info(f"Created election record: {election_name} ({election_date})")
-            except IntegrityError as e:
-                self.db.session.rollback()
-                # Handle race condition where another process created the same election
-                self.app.logger.warning(f"Election already exists (race condition): {election_name} ({election_date})")
-                election = Election.query.filter_by(date=election_date, state=self.state_code).first()
-                if not election:
-                    raise ValueError(f"Failed to create or retrieve election: {election_name} ({election_date})") from e
-        else:
-            self.app.logger.info(f"Using existing election record: {election_name} ({election_date})")
+                # Create new election record with error handling for duplicates
+                try:
+                    election = Election(
+                        date=election_date,
+                        name=election_name,
+                        state=self.state_code
+                    )
+                    self.db.session.add(election)
+                    self.db.session.commit()
+                    self.app.logger.info(f"Created election record: {election_name} ({election_date})")
+                except IntegrityError as e:
+                    self.db.session.rollback()
+                    # Handle race condition where another process created the same election
+                    self.app.logger.warning(f"Election already exists (race condition): {election_name} ({election_date})")
+                    election = Election.query.filter_by(date=election_date, state=self.state_code).first()
+                    if not election:
+                        raise ValueError(f"Failed to create or retrieve election: {election_name} ({election_date})") from e
+            else:
+                self.app.logger.info(f"Using existing election record: {election_name} ({election_date})")
 
-        return election
+            return election
+        finally:
+            if app_context:
+                app_context.__exit__(None, None, None)
 
     def _validate_election_data(self, election_date, election_name):
         """
@@ -997,77 +1022,78 @@ class VirginiaPlugin(BasePlugin):
         Returns:
             Dictionary with import results for each election
         """
-        results = {}
+        with self.app.app_context():
+            results = {}
 
-        # Sort elections chronologically (oldest first)
-        sorted_elections = sorted(self.ELECTIONS.items())
+            # Sort elections chronologically (oldest first)
+            sorted_elections = sorted(self.ELECTIONS.items())
 
-        self.app.logger.info(f"Starting historical import for {len(sorted_elections)} elections")
+            self.app.logger.info(f"Starting historical import for {len(sorted_elections)} elections")
 
-        for election_date_str, url in sorted_elections:
-            self.app.logger.info(f"Importing election: {election_date_str}")
+            for election_date_str, url in sorted_elections:
+                self.app.logger.info(f"Importing election: {election_date_str}")
 
-            try:
-                # Parse election date
-                election_date = datetime.strptime(election_date_str, '%Y-%m-%d').date()
+                try:
+                    # Parse election date
+                    election_date = datetime.strptime(election_date_str, '%Y-%m-%d').date()
 
-                # Generate election name
-                election_name = self._generate_election_name(election_date_str)
+                    # Generate election name
+                    election_name = self._generate_election_name(election_date_str)
 
-                # Get or create election record
-                election = self._get_or_create_election(election_date, election_name)
+                    # Get or create election record
+                    election = self._get_or_create_election(election_date, election_name)
 
-                # Download and parse this election's data
-                df = self._download_excel(url)
-                polling_places, precincts = self._parse_excel_data(df)
+                    # Download and parse this election's data
+                    df = self._download_excel(url)
+                    polling_places, precincts = self._parse_excel_data(df)
 
-                # Override fetch methods to return this election's data
-                old_fetch_pp = self.fetch_polling_places
-                old_fetch_pr = self.fetch_precincts
+                    # Override fetch methods to return this election's data
+                    old_fetch_pp = self.fetch_polling_places
+                    old_fetch_pr = self.fetch_precincts
 
-                self.fetch_polling_places = lambda file_url=None: polling_places
-                # Don't fetch precincts during sync() - we'll do that separately with the correct date
-                self.fetch_precincts = lambda file_url=None: []
+                    self.fetch_polling_places = lambda file_url=None: polling_places
+                    # Don't fetch precincts during sync() - we'll do that separately with the correct date
+                    self.fetch_precincts = lambda file_url=None: []
 
-                # Sync polling places
-                sync_result = self.sync()
+                    # Sync polling places
+                    sync_result = self.sync()
 
-                # Restore fetch methods
-                self.fetch_polling_places = old_fetch_pp
-                self.fetch_precincts = old_fetch_pr
+                    # Restore fetch methods
+                    self.fetch_polling_places = old_fetch_pp
+                    self.fetch_precincts = old_fetch_pr
 
-                # Now sync precincts separately with the actual election date (not today)
-                # This ensures last_change_date reflects the actual election date
-                # and links assignments to the election
-                self.fetch_precincts = lambda file_url=None: precincts
-                precinct_result = self.sync_precincts(
-                    effective_date=election_date,
-                    election_id=election.id
-                )
-                self.fetch_precincts = old_fetch_pr
+                    # Now sync precincts separately with the actual election date (not today)
+                    # This ensures last_change_date reflects the actual election date
+                    # and links assignments to the election
+                    self.fetch_precincts = lambda file_url=None: precincts
+                    precinct_result = self.sync_precincts(
+                        effective_date=election_date,
+                        election_id=election.id
+                    )
+                    self.fetch_precincts = old_fetch_pr
 
-                results[election_date_str] = {
-                    'success': sync_result['success'],
-                    'election_id': election.id,
-                    'election_name': election_name,
-                    'polling_places': sync_result['polling_places'],
-                    'precincts': precinct_result
-                }
+                    results[election_date_str] = {
+                        'success': sync_result['success'],
+                        'election_id': election.id,
+                        'election_name': election_name,
+                        'polling_places': sync_result['polling_places'],
+                        'precincts': precinct_result
+                    }
 
-                self.app.logger.info(
-                    f"Election {election_date_str} ({election_name}): "
-                    f"PP added={sync_result['polling_places']['added']}, "
-                    f"PP updated={sync_result['polling_places']['updated']}, "
-                    f"Precincts added={precinct_result['added']}, "
-                    f"Precincts updated={precinct_result['updated']}"
-                )
+                    self.app.logger.info(
+                        f"Election {election_date_str} ({election_name}): "
+                        f"PP added={sync_result['polling_places']['added']}, "
+                        f"PP updated={sync_result['polling_places']['updated']}, "
+                        f"Precincts added={precinct_result['added']}, "
+                        f"Precincts updated={precinct_result['updated']}"
+                    )
 
-            except Exception as e:
-                self.app.logger.error(f"Error importing election {election_date_str}: {e}")
-                results[election_date_str] = {
-                    'success': False,
-                    'error': str(e)
-                }
+                except Exception as e:
+                    self.app.logger.error(f"Error importing election {election_date_str}: {e}")
+                    results[election_date_str] = {
+                        'success': False,
+                        'error': str(e)
+                    }
 
         return results
 
