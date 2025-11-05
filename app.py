@@ -1574,7 +1574,7 @@ def admin_api_recent_activity():
 @login_required
 def admin_map():
     """Map page showing polling places filterable by county"""
-    return render_template('admin/map.html')
+    return render_template('admin/map_optimized.html')
 
 
 @app.route('/admin/api/polling-places-map')

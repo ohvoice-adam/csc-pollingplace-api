@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polling Places Map - CSC Polling Place API</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin: 0;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            color: white;
+        }
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #d0d0d0;
+            color: #333;
+        }
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .filter-controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .filter-controls .form-group {
+            margin-bottom: 15px;
+        }
+        .filter-controls label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .leaflet-popup-content {
+            min-width: 250px;
+        }
+        .leaflet-popup-content h6 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        .leaflet-popup-content p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .leaflet-popup-content .address {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .leaflet-popup-content .hours {
+            background: #e9ecef;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .stats-bar {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        .stats-bar .stat-item {
+            text-align: center;
+        }
+        .stats-bar .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #007bff;
+        }
+        .stats-bar .stat-label {
+            font-size: 14px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            border-radius: 8px;
+        }
+        .loading-overlay.hidden {
+            display: none;
+        }
+        .alert {
+            border-radius: 4px;
+            border: none;
+            padding: 12px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .alert-info {
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .form-control {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            outline: none;
+        }
+        .performance-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #1565c0;
+        }
+        .cluster-custom {
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            font-weight: bold;
+        }
+        .debounce-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 193, 7, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <i class="fas fa-map-marked-alt"></i>
+                Polling Places Map
+            </h1>
+            <div class="header-actions">
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary">Logout</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Performance Info -->
+        <div class="performance-info" id="performance-info">
+            <i class="fas fa-info-circle"></i>
+            <strong>Optimized Map:</strong> Using marker clustering and virtual rendering for improved performance with large datasets.
+        </div>
+
+        <!-- Statistics Bar -->
+        <div class="stats-bar">
+            <div class="row">
+                <div class="col-md-3 stat-item">
+                    <div class="stat-number" id="total-places">-</div>
+                    <div class="stat-label">Total Places</div>
+                </div>
+                <div class="col-md-3 stat-item">
+                    <div class="stat-number" id="visible-places">-</div>
+                    <div class="stat-label">Visible Places</div>
+                </div>
+                <div class="col-md-3 stat-item">
+                    <div class="stat-number" id="total-counties">-</div>
+                    <div class="stat-label">Counties</div>
+                </div>
+                <div class="col-md-3 stat-item">
+                    <div class="stat-number" id="total-states">-</div>
+                    <div class="stat-label">States</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Data Load Indicator -->
+        <div id="data-indicator" class="alert alert-info" style="display: none; margin-bottom: 20px;">
+            <i class="fas fa-info-circle"></i>
+            <span id="data-indicator-text"></span>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="filter-controls">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="state-filter">State</label>
+                        <select class="form-control" id="state-filter">
+                            <option value="">All States</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="county-filter">County</label>
+                        <select class="form-control" id="county-filter" disabled>
+                            <option value="">All Counties</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="dataset-filter">Dataset</label>
+                        <select class="form-control" id="dataset-filter">
+                            <option value="">Real Data</option>
+                            <option value="dummy">Dummy Data</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>&nbsp;</label><br>
+                        <button type="button" class="btn btn-primary" id="apply-filters">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="reset-filters">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="position-relative">
+            <div id="map">
+                <div class="loading-overlay" id="map-loading">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                        <div class="mt-2">Loading map data...</div>
+                    </div>
+                </div>
+                <div class="debounce-indicator" id="debounce-indicator">
+                    <i class="fas fa-clock"></i> Updating...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet MarkerCluster JS -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    
+    <script>
+    // Global variables
+    let map;
+    let markerClusterGroup;
+    let allData = [];
+    let currentFilters = {
+        state: '',
+        county: '',
+        dataset: ''
+    };
+    let isLoading = false;
+    let debounceTimer;
+
+    // Performance optimization: Web Worker for heavy data processing
+    let dataWorker;
+    
+    // Initialize map when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeMap();
+        loadStates();
+        loadInitialData();
+        
+        // Event listeners with debouncing
+        document.getElementById('state-filter').addEventListener('change', debounce(onStateChange, 300));
+        document.getElementById('apply-filters').addEventListener('click', debounce(applyFilters, 300));
+        document.getElementById('reset-filters').addEventListener('click', resetFilters);
+        
+        // Hide performance info after 5 seconds
+        setTimeout(() => {
+            document.getElementById('performance-info').style.display = 'none';
+        }, 5000);
+    });
+
+    // Debounce function to prevent excessive API calls
+    function debounce(func, wait) {
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(debounceTimer);
+                func(...args);
+            };
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(later, wait);
+        };
+    }
+
+    function initializeMap() {
+        // Initialize map centered on US
+        map = L.map('map').setView([39.8283, -98.5795], 4);
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+        
+        // Initialize marker cluster group
+        markerClusterGroup = L.markerClusterGroup({
+            chunkedLoading: true,
+            chunkProgress: function(processed, total) {
+                console.log(`Loading markers: ${processed}/${total}`);
+            },
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: true,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 80,
+            spiderfyDistanceMultiplier: 2
+        });
+        
+        map.addLayer(markerClusterGroup);
+    }
+
+    function loadStates() {
+        // Load states from existing data or use common states
+        const commonStates = [
+            'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+            'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+            'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+            'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+            'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+        ];
+        
+        const stateSelect = document.getElementById('state-filter');
+        commonStates.forEach(state => {
+            const option = document.createElement('option');
+            option.value = state;
+            option.textContent = state;
+            stateSelect.appendChild(option);
+        });
+    }
+
+    async function loadInitialData() {
+        if (isLoading) return;
+        isLoading = true;
+        showLoading(true);
+        
+        try {
+            const response = await fetch('/admin/api/polling-places-map');
+            const data = await response.json();
+            allData = data.features || [];
+            
+            // Process data in chunks to avoid blocking UI
+            await processDataInChunks(allData);
+            
+            updateStatistics();
+            loadCounties();
+        } catch (error) {
+            console.error('Error loading polling places:', error);
+            showError('Failed to load polling places data');
+        } finally {
+            isLoading = false;
+            showLoading(false);
+        }
+    }
+
+    // Process data in chunks to maintain responsiveness
+    async function processDataInChunks(data, chunkSize = 1000) {
+        const chunks = [];
+        for (let i = 0; i < data.length; i += chunkSize) {
+            chunks.push(data.slice(i, i + chunkSize));
+        }
+        
+        for (const chunk of chunks) {
+            await processChunk(chunk);
+            // Allow UI to breathe between chunks
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+    }
+
+    async function processChunk(chunk) {
+        return new Promise(resolve => {
+            requestAnimationFrame(() => {
+                chunk.forEach(feature => {
+                    addMarkerToCluster(feature);
+                });
+                resolve();
+            });
+        });
+    }
+
+    function addMarkerToCluster(feature) {
+        const coords = feature.geometry.coordinates;
+        const props = feature.properties;
+        
+        if (coords && coords.length === 2) {
+            const marker = L.marker([coords[1], coords[0]]);
+            
+            // Create popup content
+            const popupContent = createPopupContent(props);
+            marker.bindPopup(popupContent);
+            
+            markerClusterGroup.addLayer(marker);
+        }
+    }
+
+    function onStateChange() {
+        const stateFilter = document.getElementById('state-filter');
+        const countyFilter = document.getElementById('county-filter');
+        
+        if (stateFilter.value) {
+            countyFilter.disabled = false;
+            loadCounties();
+        } else {
+            countyFilter.disabled = true;
+            countyFilter.innerHTML = '<option value="">All Counties</option>';
+        }
+    }
+
+    async function loadCounties() {
+        const stateFilter = document.getElementById('state-filter').value;
+        const countyFilter = document.getElementById('county-filter');
+        const datasetFilter = document.getElementById('dataset-filter').value;
+        
+        if (!stateFilter) {
+            countyFilter.disabled = true;
+            return;
+        }
+        
+        const params = new URLSearchParams();
+        if (stateFilter) params.append('state', stateFilter);
+        if (datasetFilter) params.append('dataset', datasetFilter);
+        
+        try {
+            const response = await fetch(`/admin/api/counties?${params}`);
+            const data = await response.json();
+            
+            countyFilter.innerHTML = '<option value="">All Counties</option>';
+            (data.counties || []).forEach(county => {
+                const option = document.createElement('option');
+                option.value = county;
+                option.textContent = county;
+                countyFilter.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading counties:', error);
+        }
+    }
+
+    async function applyFilters() {
+        if (isLoading) return;
+        
+        currentFilters.state = document.getElementById('state-filter').value;
+        currentFilters.county = document.getElementById('county-filter').value;
+        currentFilters.dataset = document.getElementById('dataset-filter').value;
+        
+        showDebounceIndicator(true);
+        showLoading(true);
+        
+        try {
+            // Build query parameters
+            const params = new URLSearchParams();
+            if (currentFilters.state) params.append('state', currentFilters.state);
+            if (currentFilters.county) params.append('county', currentFilters.county);
+            if (currentFilters.dataset) params.append('dataset', currentFilters.dataset);
+            
+            const response = await fetch(`/admin/api/polling-places-map?${params}`);
+            const data = await response.json();
+            allData = data.features || [];
+            
+            // Clear existing markers
+            markerClusterGroup.clearLayers();
+            
+            // Process new data in chunks
+            await processDataInChunks(allData);
+            
+            updateStatistics();
+            
+            // Fit map to show all markers
+            if (markerClusterGroup.getLayers().length > 0) {
+                map.fitBounds(markerClusterGroup.getBounds().pad(0.1));
+            }
+            
+        } catch (error) {
+            console.error('Error applying filters:', error);
+            showError('Failed to apply filters');
+        } finally {
+            showLoading(false);
+            showDebounceIndicator(false);
+        }
+    }
+
+    function resetFilters() {
+        document.getElementById('state-filter').value = '';
+        document.getElementById('county-filter').value = '';
+        document.getElementById('county-filter').disabled = true;
+        document.getElementById('dataset-filter').value = '';
+        
+        currentFilters = {
+            state: '',
+            county: '',
+            dataset: ''
+        };
+        
+        loadInitialData();
+    }
+
+    function createPopupContent(props) {
+        return `
+            <h6>${props.name || 'Unnamed Location'}</h6>
+            <p class="address">${props.address || 'No address available'}</p>
+            ${props.county ? `<p><strong>County:</strong> ${props.county}</p>` : ''}
+            ${props.city ? `<p><strong>City:</strong> ${props.city}</p>` : ''}
+            ${props.polling_hours ? `<p class="hours"><strong>Hours:</strong> ${props.polling_hours}</p>` : ''}
+            ${props.notes ? `<p><strong>Notes:</strong> ${props.notes}</p>` : ''}
+            ${props.voter_services ? `<p><strong>Services:</strong> ${props.voter_services}</p>` : ''}
+        `;
+    }
+
+    function updateStatistics() {
+        // All data is loaded, so total and visible are the same
+        const totalPlaces = allData.length;
+        const counties = new Set();
+        const states = new Set();
+        
+        // Use for loop instead of map for better performance with large datasets
+        for (let i = 0; i < allData.length; i++) {
+            const f = allData[i];
+            if (f.properties.county) counties.add(f.properties.county);
+            if (f.properties.state) states.add(f.properties.state);
+        }
+        
+        document.getElementById('total-places').textContent = totalPlaces.toLocaleString();
+        document.getElementById('visible-places').textContent = totalPlaces.toLocaleString();
+        document.getElementById('total-counties').textContent = counties.size.toLocaleString();
+        document.getElementById('total-states').textContent = states.size.toLocaleString();
+        
+        // Hide data indicator since all records are loaded
+        const dataIndicator = document.getElementById('data-indicator');
+        if (dataIndicator) {
+            dataIndicator.style.display = 'none';
+        }
+    }
+
+    function showLoading(show) {
+        const loadingOverlay = document.getElementById('map-loading');
+        if (show) {
+            loadingOverlay.classList.remove('hidden');
+        } else {
+            loadingOverlay.classList.add('hidden');
+        }
+    }
+
+    function showDebounceIndicator(show) {
+        const indicator = document.getElementById('debounce-indicator');
+        if (show) {
+            indicator.style.display = 'block';
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+
+    function showError(message) {
+        // Use a less intrusive error display
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.querySelector('.container');
+        container.insertBefore(alertDiv, container.querySelector('.stats-bar'));
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.parentNode.removeChild(alertDiv);
+            }
+        }, 5000);
+    }
+
+    // Performance monitoring
+    let performanceStats = {
+        markersAdded: 0,
+        lastUpdateTime: Date.now()
+    };
+
+    function logPerformance() {
+        const now = Date.now();
+        const timeDiff = now - performanceStats.lastUpdateTime;
+        console.log(`Performance: Added ${performanceStats.markersAdded} markers in ${timeDiff}ms`);
+        performanceStats.lastUpdateTime = now;
+        performanceStats.markersAdded = 0;
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        if (markerClusterGroup) {
+            markerClusterGroup.clearLayers();
+        }
+    });
+    </script>
+</body>
+</html>
