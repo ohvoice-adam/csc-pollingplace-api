@@ -86,7 +86,7 @@ class BigQueryPlugin(BasePlugin):
             
             # Get the query from environment variable
             # The query should contain {state_code} as a placeholder for the state code
-            query_template = os.getenv('BIGQUERY_QUERY_TEMPLATE', """
+            query_template = os.getenv('BIGQUERY_QUERY_TEMPLATE') or """
             SELECT
                 precinctname,
                 precinctcode,
@@ -97,7 +97,7 @@ class BigQueryPlugin(BasePlugin):
                 AND p.voterstatus = 'active'
                 AND d.state = '{state_code}'
             GROUP BY 1,2
-            """)
+            """
             
             # Format the query with the state code
             query = query_template.format(state_code=state_code)

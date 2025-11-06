@@ -207,11 +207,11 @@ class TestBigQueryQueryExecution(unittest.TestCase):
         """Test public method for getting voter data by state."""
         mock_result = {'Test Precinct (001)': 1500}
         
-        with patch.object(self.plugin, 'fetch_polling_places', return_value=mock_result):
+        with patch.object(self.plugin, 'fetch_polling_places', return_value=mock_result) as mock_fetch:
             result = self.plugin.get_voter_data_by_state('OH')
 
         self.assertEqual(result, mock_result)
-        self.plugin.fetch_polling_places.assert_called_once_with('OH')
+        mock_fetch.assert_called_once_with('OH')
 
 
 @pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
@@ -230,9 +230,9 @@ class TestBigQueryErrorScenarios(unittest.TestCase):
         """Test handling of BigQuery query execution errors."""
         mock_getenv.return_value = None  # Use default query
         
-        from google.cloud import bigquery
+        from google.cloud import exceptions
         mock_client = Mock()
-        mock_client.query.side_effect = bigquery.GoogleCloudError("Query failed")
+        mock_client.query.side_effect = exceptions.GoogleCloudError("Query failed")
         
         with patch.object(self.plugin, 'connect_to_bigquery', return_value=mock_client):
             with self.assertRaises(Exception) as context:
@@ -286,8 +286,9 @@ class TestBigQueryErrorScenarios(unittest.TestCase):
         mock_client.query.return_value = mock_query_job
         
         with patch.object(self.plugin, 'connect_to_bigquery', return_value=mock_client):
-            with self.assertRaises(AttributeError):
+            with self.assertRaises(Exception) as context:
                 self.plugin.fetch_polling_places('OH')
+            self.assertIn("Failed to query BigQuery", str(context.exception))
 
     @patch('plugins.bigquery_plugin.os.getenv')
     def test_invalid_state_code(self, mock_getenv):
