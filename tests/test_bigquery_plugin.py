@@ -13,7 +13,14 @@ import pytest
 import unittest
 from unittest.mock import Mock, patch, MagicMock, call
 import os
-from google.cloud import bigquery
+
+# Try to import Google Cloud BigQuery, skip tests if not available
+try:
+    from google.cloud import bigquery
+    BIGQUERY_AVAILABLE = True
+except ImportError:
+    BIGQUERY_AVAILABLE = False
+    bigquery = None
 
 # Import the plugin and models
 import sys
@@ -23,6 +30,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plugins.bigquery_plugin import BigQueryPlugin
 
 
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
 class TestBigQueryConnection(unittest.TestCase):
     """Unit tests for BigQuery plugin connection functionality."""
 
@@ -77,6 +86,7 @@ class TestBigQueryConnection(unittest.TestCase):
         self.assertEqual(self.plugin.description, 'BigQuery plugin for querying voter data by state')
 
 
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
 class TestBigQueryQueryExecution(unittest.TestCase):
     """Unit tests for BigQuery query execution functionality."""
 
@@ -204,6 +214,7 @@ class TestBigQueryQueryExecution(unittest.TestCase):
         self.plugin.fetch_polling_places.assert_called_once_with('OH')
 
 
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
 class TestBigQueryErrorScenarios(unittest.TestCase):
     """Error scenario tests for BigQuery plugin."""
 
@@ -321,6 +332,7 @@ class TestBigQueryErrorScenarios(unittest.TestCase):
         self.assertEqual(result['Precinct 999 (999)'], 1999)
 
 
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
 class TestBigQueryConfiguration(unittest.TestCase):
     """Tests for BigQuery plugin configuration."""
 
@@ -393,6 +405,7 @@ class TestBigQueryConfiguration(unittest.TestCase):
                 self.assertIn(expected_substitution, call_args)
 
 
+@pytest.mark.skipif(not BIGQUERY_AVAILABLE, reason="Google Cloud BigQuery not available")
 class TestBigQueryIntegration(unittest.TestCase):
     """Integration tests for BigQuery plugin workflow."""
 
