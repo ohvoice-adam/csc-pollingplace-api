@@ -25,6 +25,9 @@ python-dotenv==1.0.0
 # Utilities
 requests==2.31.0
 
+# Caching
+redis==5.0.1
+
 # Data processing (for plugin Excel parsing)
 pandas==2.2.0
 openpyxl==3.1.2
@@ -37,3 +40,13 @@ Flask-Admin==1.6.1
 
 # Documentation rendering
 Markdown==3.5.1
+
+# Development dependencies
+pytest==8.0.0
+pytest-cov==4.0.0
+flake8==7.0.0
+mypy==1.8.0
+bandit==1.7.6
+safety==3.0.1
+black==24.1.1
+isort==5.13.2

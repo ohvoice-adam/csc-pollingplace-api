@@ -229,6 +229,167 @@ DB_HOST=/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME
 
 **Note for Cloud Run**: While Cloud Run Gen2 supports volume mounting for SQLite, using Cloud SQL is recommended for production deployments for better scalability and reliability.
 
+## Database Performance Optimization
+
+This API includes a comprehensive database performance optimization system to ensure fast query responses and efficient resource utilization.
+
+### Features
+
+#### 🚀 Connection Pooling
+- **PostgreSQL**: Configurable connection pools (20 base + 30 overflow connections)
+- **SQLite**: Optimized connection handling with automatic cleanup
+- **Automatic Scaling**: Dynamic pool adjustment based on load
+- **Connection Monitoring**: Real-time connection pool statistics
+
+#### 📊 Query Performance Monitoring
+- **Slow Query Detection**: Automatic identification of queries exceeding 1.0s threshold
+- **Performance Statistics**: Detailed metrics for all query types
+- **Real-time Monitoring**: Live query performance tracking
+- **Performance Alerts**: Configurable thresholds for performance warnings
+
+#### 🔍 Database Indexing Strategy
+- **Performance Indexes**: Comprehensive indexing on frequently queried columns:
+  - `state`, `county`, `source_plugin` for geographic filtering
+  - `latitude`, `longitude` for location-based queries
+  - `created_at`, `updated_at` for time-based filtering
+  - Composite indexes for common query patterns
+- **Automatic Index Management**: Creation and maintenance of optimal indexes
+- **Index Analysis**: Performance recommendations based on query patterns
+
+#### ⚡ Bulk Operations Optimization
+- **Bulk Insert**: Optimized batch inserts for large datasets
+- **Bulk Updates**: Efficient mass update operations
+- **Transaction Management**: Optimized transaction boundaries
+- **Memory Efficiency**: Reduced memory usage during bulk operations
+
+#### 🔄 Migration System
+- **Version Control**: Database schema versioning with rollback support
+- **Automatic Migrations**: Seamless schema updates on application startup
+- **Migration History**: Complete audit trail of all schema changes
+- **Safe Rollbacks**: Ability to revert problematic migrations
+
+### Management CLI Tool
+
+A comprehensive command-line tool is available for database management:
+
+```bash
+# Show database performance status
+python3 db_manager.py status
+
+# Run pending migrations
+python3 db_manager.py migrate
+
+# Create/recreate indexes
+python3 db_manager.py index --force
+
+# Analyze performance and get suggestions
+python3 db_manager.py analyze
+
+# Monitor queries in real-time
+python3 db_manager.py monitor --threshold 0.5
+
+# Optimize database (VACUUM/ANALYZE)
+python3 db_manager.py optimize --vacuum --analyze
+
+# Reset performance statistics
+python3 db_manager.py reset_stats
+```
+
+### Performance Monitoring
+
+#### Database Status
+The `status` command provides comprehensive performance information:
+- Connection pool statistics
+- Query performance metrics
+- Index utilization
+- Table size and row counts
+- Migration status
+
+#### Query Analysis
+- **Slow Query Identification**: Automatic detection of performance bottlenecks
+- **Query Pattern Analysis**: Understanding of most common query types
+- **Performance Trends**: Historical performance data
+- **Optimization Recommendations**: AI-powered suggestions for improvements
+
+#### Index Management
+- **Automatic Creation**: Essential indexes created during initialization
+- **Performance Monitoring**: Index usage statistics
+- **Optimization Suggestions**: Recommendations for additional indexes
+- **Maintenance**: Index rebuilding and optimization
+
+### Configuration
+
+#### Connection Pool Settings
+```python
+# PostgreSQL (default)
+DB_POOL_SIZE = 20
+DB_MAX_OVERFLOW = 30
+DB_POOL_TIMEOUT = 30
+DB_POOL_RECYCLE = 3600
+
+# SQLite (optimized)
+DB_POOL_SIZE = 10
+DB_MAX_OVERFLOW = 20
+```
+
+#### Performance Thresholds
+```python
+# Slow query detection (seconds)
+SLOW_QUERY_THRESHOLD = 1.0
+
+# Connection pool settings
+CONNECTION_POOL_SIZE = 20
+MAX_OVERFLOW_CONNECTIONS = 30
+```
+
+### Best Practices
+
+#### Production Deployment
+1. **Use PostgreSQL**: Recommended for production over SQLite
+2. **Monitor Performance**: Regularly check `db_manager.py status`
+3. **Optimize Indexes**: Run `db_manager.py analyze` periodically
+4. **Database Maintenance**: Use `db_manager.py optimize --vacuum --analyze`
+5. **Monitor Connections**: Keep an eye on connection pool usage
+
+#### Performance Tuning
+1. **Query Optimization**: Use the monitoring tool to identify slow queries
+2. **Index Strategy**: Add composite indexes for complex query patterns
+3. **Connection Pooling**: Adjust pool sizes based on application load
+4. **Bulk Operations**: Use bulk operations for large data imports
+5. **Regular Maintenance**: Schedule periodic database optimization
+
+#### Monitoring Setup
+1. **Daily Status Checks**: Automate `db_manager.py status` runs
+2. **Performance Alerts**: Set up monitoring for slow query thresholds
+3. **Migration Tracking**: Monitor migration success/failure
+4. **Resource Usage**: Track database memory and CPU usage
+
+### Troubleshooting
+
+#### Performance Issues
+```bash
+# Check current performance status
+python3 db_manager.py status --verbose
+
+# Analyze for optimization opportunities
+python3 db_manager.py analyze
+
+# Monitor real-time queries
+python3 db_manager.py monitor --threshold 0.5
+```
+
+#### Database Maintenance
+```bash
+# Run full optimization
+python3 db_manager.py optimize --vacuum --analyze
+
+# Recreate all indexes
+python3 db_manager.py index --force
+
+# Check migration status
+python3 db_manager.py migrate
+```
+
 ### Docker Deployment
 
 Run locally with Docker:

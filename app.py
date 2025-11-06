@@ -79,9 +79,35 @@ else:
 app.config['geocoder_priority'] = config['geocoder_priority']
 
 # Initialize extensions
-from database import db
+from database import db, configure_database
 from models import PollingPlace, APIKey, Precinct, PrecinctAssignment, Election, AdminUser, AuditTrail
+
+# Configure database with connection pooling
+configure_database(app)
 db.init_app(app)
+
+# Initialize database optimization
+from database_optimization import init_database_optimization
+init_database_optimization(app)
+
+# Initialize API performance optimizations
+from api_performance import (
+    PaginationHelper, cache_response, compress_response, 
+    monitor_response_time, paginate_api_response, QueryOptimizer
+)
+from redis_cache import redis_cache_manager, redis_cache_response
+
+# Initialize migration system
+from migrations import init_migrations, run_migrations
+with app.app_context():
+    init_migrations()
+    # Auto-run migrations on startup
+    try:
+        run_migrations()
+        app.logger.info("Database migrations completed successfully")
+    except Exception as e:
+        app.logger.error(f"Database migration failed: {e}")
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'admin_login'
@@ -113,7 +139,8 @@ def timezone_filter(timestamp):
     eastern_time = timestamp - timedelta(hours=4)
     return eastern_time.strftime('%Y-%m-%d %H:%M:%S')
 
-# Initialize plugin manager (will be done after models are defined)
+# Initialize plugin manager after database is configured
+# Note: This will be properly initialized after db.create_all()
 plugin_manager = None
 
 # Initialize scheduler
@@ -332,14 +359,20 @@ def revoke_api_key(key_id):
 @app.route('/api/polling-places', methods=['GET'])
 @require_api_key
 @limiter.limit(get_api_key_limits)
+@monitor_response_time
+@redis_cache_response(ttl=300, key_prefix="polling_places")
+@compress_response
+@paginate_api_response(items_key='polling_places', default_per_page=20)
 def get_polling_places():
     """
-    Get polling places for a specific state
+    Get polling places for a specific state with pagination
     Query parameters (REQUIRED):
     - state: State code (e.g., ?state=VA)
     Optional parameters:
     - dataset: Data source - 'dummy' for test data (default: real plugin data)
     - format: Response format - 'vip' or 'standard' (default: standard)
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 20, max: 100)
     """
     try:
         # State parameter is now required
@@ -368,22 +401,24 @@ def get_polling_places():
             # Query by both state AND source_plugin to avoid mixing with dummy data
             query = PollingPlace.query.filter_by(state=state_filter, source_plugin=plugin.name)
 
-        polling_places = query.all()
-
+        # Apply query optimizations
+        query = QueryOptimizer.apply_eager_loading(query, PollingPlace, [])
+        
         # Check format parameter
         response_format = request.args.get('format', 'standard').lower()
 
         if response_format == 'vip':
-            # Return in VIP format
+            # For VIP format, we need to process all results, so apply pagination manually
+            page, per_page = PaginationHelper.get_pagination_params()
+            polling_places, total_count, pagination_info = PaginationHelper.paginate_query(query, page, per_page)
+            
             return jsonify({
+                'pagination': pagination_info,
                 'pollingLocations': [pp.to_vip_format() for pp in polling_places]
             }), 200
         else:
-            # Return in standard format
-            return jsonify({
-                'count': len(polling_places),
-                'polling_places': [pp.to_dict() for pp in polling_places]
-            }), 200
+            # Return query for automatic pagination
+            return query
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1568,6 +1603,46 @@ def admin_api_recent_activity():
         return jsonify({'activity': activity})
     except Exception as e:
         return jsonify({'error': str(e), 'activity': []})
+
+
+@app.route('/admin/api/cache-stats')
+@login_required
+def admin_api_cache_stats():
+    """API endpoint for cache statistics"""
+    try:
+        stats = redis_cache_manager.get_stats()
+        health = redis_cache_manager.health_check()
+        config = redis_cache_manager.get_cache_config()
+        
+        return jsonify({
+            'stats': stats,
+            'health': health,
+            'config': config
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/admin/api/cache-clear', methods=['POST'])
+@login_required
+def admin_api_cache_clear():
+    """API endpoint to clear cache"""
+    try:
+        pattern = request.json.get('pattern', 'all') if request.json else 'all'
+        
+        if pattern == 'all':
+            redis_cache_manager.clear()
+            message = 'All cache cleared successfully'
+        else:
+            count = redis_cache_manager.delete(pattern)
+            message = f'Cleared {count} cache entries matching pattern: {pattern}'
+        
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False})
 
 
 @app.route('/admin/map')

@@ -1,0 +1,439 @@
+{% extends 'admin/flask_admin/base.html' %}
+
+{% block head %}
+    {{ super() }}
+    <title>{{ admin_view.name }} - {{ admin_view.admin.name }}</title>
+    
+    <!-- Performance optimized CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_performance.css') }}">
+    
+    <style>
+        /* Loading skeleton styles */
+        .skeleton-loader {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .skeleton-row {
+            height: 40px;
+            margin: 2px 0;
+            border-radius: 4px;
+        }
+        
+        /* Lazy loading indicator */
+        .lazy-loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        
+        .lazy-loading .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Performance optimizations */
+        .table-responsive {
+            overflow-x: auto;
+            will-change: transform;
+        }
+        
+        .table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+        
+        /* Virtual scrolling container */
+        .virtual-scroll-container {
+            height: 600px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .virtual-scroll-content {
+            position: relative;
+        }
+        
+        /* Progressive loading styles */
+        .progress-bar-container {
+            width: 100%;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background-color: #667eea;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            {% block menu %}
+            <ul class="nav nav-sidebar">
+                {% for view in admin_view.admin.menu() %}
+                <li{% if view.is_active() %} class="active"{% endif %}>
+                    <a href="{{ view.url }}">{{ view.name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endblock %}
+        </div>
+        
+        <div class="col-md-10">
+            {% block messages %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% endblock %}
+            
+            {% block content %}
+            <!-- Breadcrumb Navigation -->
+            <ol class="breadcrumb">
+                <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('db_dashboard.index') }}">Records</a></li>
+                <li class="active">{{ admin_view.name }}</li>
+            </ol>
+            
+            <div class="panel">
+                <div class="panel-heading">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h3 class="panel-title">{{ admin_view.name }}</h3>
+                            <div class="record-count" id="recordCount">
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            {% block model_menu_bar %}
+                            <div class="btn-group pull-right">
+                                {% if admin_view.can_create %}
+                                <a href="{{ get_url('.create_view', url=return_url) }}" class="btn btn-primary">
+                                    <i class="fa fa-plus"></i> {{ _gettext('Create New Record') }}
+                                </a>
+                                {% endif %}
+                                
+                                <!-- Performance controls -->
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown">
+                                        <i class="fa fa-cog"></i> Performance
+                                        <span class="caret"></span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a href="#" id="toggleLazyLoad">
+                                                <i class="fa fa-check"></i> Lazy Loading
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#" id="toggleVirtualScroll">
+                                                <i class="fa fa-list"></i> Virtual Scroll
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a href="#" id="refreshData">
+                                                <i class="fa fa-refresh"></i> Refresh Data
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                
+                                {% if admin_view.can_export %}
+                                {% if export_types|length > 1 %}
+                                <div class="btn-group">
+                                    <button class="btn btn-secondary dropdown-toggle" data-toggle="dropdown">
+                                        <i class="fa fa-download"></i> {{ _gettext('Export') }}
+                                        <span class="caret"></span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for export_type in export_types %}
+                                        <li><a href="{{ get_url('.export', export_type=export_type, **request.args) }}">{{ _gettext('Export as %(export_type)s', export_type=export_type) }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% else %}
+                                <a href="{{ get_url('.export', export_type=export_types[0], **request.args) }}" class="btn btn-secondary">
+                                    <i class="fa fa-download"></i> {{ _gettext('Export') }}
+                                </a>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                            {% endblock %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel-body">
+                    {% block model_list_table %}
+                    <!-- Search and Filters -->
+                    <div class="row" id="searchFilters">
+                        <div class="col-md-12">
+                            {% if search_supported %}
+                            <form method="GET" action="{{ return_url }}" class="form-inline" id="searchForm">
+                                {% if filter_args %}
+                                {% for arg in filter_args %}
+                                <input type="hidden" name="{{ arg.name }}" value="{{ arg.value }}">
+                                {% endfor %}
+                                {% endif %}
+                                <div class="form-group">
+                                    <input type="text" name="search" value="{{ search }}" class="search-input" 
+                                           placeholder="{{ _gettext('Search') }}" id="searchInput">
+                                </div>
+                                <button type="submit" class="btn btn-primary">{{ _gettext('Search') }}</button>
+                                {% if search %}
+                                <a href="{{ get_url('.index_view', **{k: v for k, v in request.args.items() if k != 'search'}) }}" class="btn btn-secondary">{{ _gettext('Clear') }}</a>
+                                {% endif %}
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Progress indicator for large datasets -->
+                    <div id="progressContainer" style="display: none;">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                        </div>
+                        <div class="text-center">
+                            <span id="progressText">Loading data...</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Data table with lazy loading -->
+                    <div id="dataTableContainer">
+                        <!-- Skeleton loader while data loads -->
+                        <div id="skeletonLoader" style="display: none;">
+                            {% for i in range(10) %}
+                            <div class="skeleton-row"></div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Actual data table -->
+                        <div id="dataTable" class="table-responsive" style="display: none;">
+                            <table class="table table-striped table-bordered table-hover" id="mainTable">
+                                <thead>
+                                    <tr>
+                                        {% if actions %}
+                                        <th class="list-checkbox-column">
+                                            <input type="checkbox" name="rowtoggle" class="action-rowtoggle" />
+                                        </th>
+                                        {% endif %}
+                                        {% for column, column_name in list_columns %}
+                                        <th>
+                                            {% if column in sort_columns %}
+                                            {% if sort_column == column %}
+                                                {% if sort_desc == 1 %}
+                                                    <a href="{{ get_url('.index_view', sort=column, sort_desc=0, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                                        {{ column_name }} <i class="fa fa-sort-desc"></i>
+                                                    </a>
+                                                {% else %}
+                                                    <a href="{{ get_url('.index_view', sort=column, sort_desc=1, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                                        {{ column_name }} <i class="fa fa-sort-asc"></i>
+                                                    </a>
+                                                {% endif %}
+                                            {% else %}
+                                            <a href="{{ get_url('.index_view', sort=column, sort_desc=0, **request.args) }}" title="{{ _gettext('Sort by %(name)s', name=column_name) }}">
+                                                {{ column_name }} <i class="fa fa-sort"></i>
+                                            </a>
+                                            {% endif %}
+                                            {% else %}
+                                            {{ column_name }}
+                                            {% endif %}
+                                            
+                                            <!-- Add helpful tooltips for complex columns -->
+                                            {% if column == 'latitude' or column == 'longitude' %}
+                                            <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                               data-toggle="tooltip" data-placement="top" 
+                                               title="Geographic coordinates in decimal degrees"></i>
+                                            {% elif column == 'source_plugin' %}
+                                            <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                               data-toggle="tooltip" data-placement="top" 
+                                               title="Data source plugin name"></i>
+                                            {% elif column == 'registered_voters' %}
+                                            <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                               data-toggle="tooltip" data-placement="top" 
+                                               title="Total registered voters"></i>
+                                            {% elif column == 'changed_recently' %}
+                                            <i class="fa fa-question-circle" style="color: #667eea; cursor: help; margin-left: 5px; font-size: 12px;" 
+                                               data-toggle="tooltip" data-placement="top" 
+                                               title="Changed in last 6 months"></i>
+                                            {% endif %}
+                                        </th>
+                                        {% endfor %}
+                                        {% if admin_view.can_edit or admin_view.can_delete %}
+                                        <th class="list-actions-column">{{ _gettext('Actions') }}</th>
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody">
+                                    <!-- Data will be loaded here via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Lazy loading indicator -->
+                        <div id="lazyLoadingIndicator" class="lazy-loading" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Loading more records...</p>
+                        </div>
+                        
+                        <!-- No data message -->
+                        <div id="noDataMessage" class="text-center" style="padding: 40px; display: none;">
+                            <i class="fa fa-database" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                            <p style="color: #999;">{{ _gettext('There are no items in the table.') }}</p>
+                            {% if admin_view.can_create %}
+                            <a href="{{ get_url('.create_view', url=return_url) }}" class="btn btn-primary">{{ _gettext('Create New Record') }}</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Pagination controls -->
+                    <div id="paginationContainer" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <span id="paginationInfo"></span>
+                            </div>
+                            <div class="col-md-6 text-right">
+                                <div class="btn-group" id="paginationControls">
+                                    <!-- Pagination buttons will be added here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endblock %}
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+</div>
+
+<!-- Performance optimized JavaScript -->
+<script src="{{ url_for('static', filename='js/admin_performance.js') }}"></script>
+<script>
+// Admin performance optimization
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize performance manager
+    const performanceManager = new AdminPerformanceManager({
+        endpoint: '{{ request.endpoint }}',
+        pageSize: 50,
+        enableLazyLoad: true,
+        enableVirtualScroll: false,
+        enableCaching: true
+    });
+    
+    // Load initial data
+    performanceManager.loadInitialData();
+    
+    // Setup event listeners
+    document.getElementById('toggleLazyLoad').addEventListener('click', function(e) {
+        e.preventDefault();
+        performanceManager.toggleLazyLoad();
+    });
+    
+    document.getElementById('toggleVirtualScroll').addEventListener('click', function(e) {
+        e.preventDefault();
+        performanceManager.toggleVirtualScroll();
+    });
+    
+    document.getElementById('refreshData').addEventListener('click', function(e) {
+        e.preventDefault();
+        performanceManager.refreshData();
+    });
+    
+    // Search with debouncing
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                performanceManager.performSearch(this.value);
+            }, 300);
+        });
+    }
+    
+    // Infinite scroll for lazy loading
+    window.addEventListener('scroll', function() {
+        if (performanceManager.config.enableLazyLoad) {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            
+            if (scrollTop + windowHeight >= documentHeight - 100) {
+                performanceManager.loadMoreData();
+            }
+        }
+    });
+});
+</script>
+
+<style>
+.inline-form {
+    display: inline-block;
+    margin: 0;
+    padding: 0;
+}
+
+.inline-form button {
+    margin: 0;
+    padding: 6px 12px;
+}
+
+.list-checkbox-column {
+    width: 30px;
+    text-align: center;
+}
+
+.list-actions-column {
+    width: 120px;
+    text-align: center;
+}
+
+.table-responsive {
+    margin-top: 20px;
+}
+
+.action-rowtoggle {
+    margin: 0;
+}
+
+.action-checkbox {
+    margin: 0;
+}
+
+.record-count {
+    font-size: 14px;
+    color: #666;
+    margin-top: 5px;
+}
+
+.btn-group.pull-right {
+    float: right;
+}
+</style>
+{% endblock %}
