@@ -6,7 +6,15 @@ This plugin connects to BigQuery and returns a dictionary mapping precincts to n
 import os
 
 from typing import Dict, Any
-from google.cloud import bigquery
+
+# Try to import Google Cloud BigQuery, handle gracefully if not available
+try:
+    from google.cloud import bigquery
+    BIGQUERY_AVAILABLE = True
+except ImportError:
+    BIGQUERY_AVAILABLE = False
+    bigquery = None
+
 from plugins.base_plugin import BasePlugin
 
 class BigQueryPlugin(BasePlugin):
@@ -25,6 +33,11 @@ class BigQueryPlugin(BasePlugin):
         super().__init__(app, db)
         self.client = None
         
+        # Check if BigQuery is available
+        if not BIGQUERY_AVAILABLE:
+            self.app.logger.warning("Google Cloud BigQuery not available. BigQuery plugin will be disabled.")
+            return
+        
     @property
     def name(self) -> str:
         """Unique name for this plugin"""
@@ -40,16 +53,20 @@ class BigQueryPlugin(BasePlugin):
         """Human-readable description of this plugin"""
         return 'BigQuery plugin for querying voter data by state'
     
-    def connect_to_bigquery(self) -> bigquery.Client:
+    def connect_to_bigquery(self):
         """
         Connect to BigQuery client.
         This assumes authentication is set up via environment variables or application default credentials.
         """
+        if not BIGQUERY_AVAILABLE:
+            raise RuntimeError("Google Cloud BigQuery not available. Install google-cloud-bigquery package.")
+        
         if self.client is None:
-            self.client = bigquery.Client()
+            # Type: ignore because we've already checked BIGQUERY_AVAILABLE
+            self.client = bigquery.Client()  # type: ignore
         return self.client
     
-    def fetch_polling_places(self, state_code: str = 'OH') -> Dict[str, Any]:
+    def fetch_polling_places(self, state_code: str = 'OH') -> Any:
         """
         Query BigQuery for voter data by state.
         
@@ -59,6 +76,10 @@ class BigQueryPlugin(BasePlugin):
         Returns:
             Dictionary mapping precinct names to number of voters
         """
+        if not BIGQUERY_AVAILABLE:
+            self.app.logger.warning("BigQuery not available, returning empty result")
+            return {}
+        
         try:
             # Connect to BigQuery
             client = self.connect_to_bigquery()
