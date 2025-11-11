@@ -119,6 +119,32 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"]
 )
 
+# Initialize security middleware
+try:
+    from security_middleware import init_security
+    from security import SecurityValidator, APIKeySecurity, RateLimitSecurity, validate_json_input, log_security_event, PATTERNS
+    security_middleware = init_security(app)
+    app.logger.info("Security middleware initialized successfully")
+except ImportError as e:
+    app.logger.warning(f"Security modules not available: {e}")
+    security_middleware = None
+    # Fallback dummy functions if security modules not available
+    def validate_json_input(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+    def log_security_event(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+    PATTERNS = {}
+
+# Initialize security middleware
+from security_middleware import init_security
+from security import SecurityValidator, APIKeySecurity, RateLimitSecurity
+security_middleware = init_security(app)
+app.logger.info("Security middleware initialized")
+
 # Add timezone filter for templates
 @app.template_filter('timezone_filter')
 def timezone_filter(timestamp):
@@ -153,6 +179,9 @@ from flask_login import UserMixin
 # Create tables
 with app.app_context():
     db.create_all()
+
+# Initialize plugin manager after database is created
+plugin_manager = PluginManager(app, db)
 
 # Rate limiting helper functions
 def get_api_key_identifier():
@@ -250,6 +279,8 @@ def index():
 
 
 @app.route('/health')
+@require_api_key
+@limiter.limit(get_api_key_limits)
 def health():
     """Health check endpoint for Cloud Run"""
     try:
@@ -300,16 +331,35 @@ def create_api_key():
     Requires master API key or admin authentication
     Body: {"name": "Description of key"}
     """
-    # Check for master key
+    # Validate JSON first - if request is malformed, return 400 before auth check
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({'error': 'Invalid JSON in request body'}), 400
+    
+    if not data or 'name' not in data:
+        return jsonify({'error': 'Name required in request body'}), 400
+
+    # Check for master key after JSON validation
     master_key = os.getenv('MASTER_API_KEY')
     provided_key = request.headers.get('X-API-Key')
 
     if not master_key or provided_key != master_key:
         return jsonify({'error': 'Master API key required to create new keys'}), 401
 
-    data = request.get_json()
-    if not data or 'name' not in data:
-        return jsonify({'error': 'Name required in request body'}), 400
+    # Apply security validation if available
+    if security_middleware:
+        try:
+            validated_name = SecurityValidator.validate_string(
+                data['name'], 
+                'name', 
+                max_length=255, 
+                pattern=PATTERNS.get('api_key_name'), 
+                required=True
+            )
+            data['name'] = validated_name
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
 
     # Generate new key
     new_key = APIKey(
@@ -553,9 +603,12 @@ def get_polling_place_precincts(location_id):
 @limiter.limit(get_api_key_limits)
 def list_plugins():
     """List all loaded plugins and their status"""
-    return jsonify({
-        'plugins': plugin_manager.list_plugins()
-    }), 200
+    try:
+        return jsonify({
+            'plugins': plugin_manager.list_plugins()
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/plugins/<plugin_name>/sync', methods=['POST'])
@@ -564,12 +617,39 @@ def list_plugins():
 def sync_plugin(plugin_name):
     """Trigger a data sync for a specific plugin"""
     try:
+        # Check if plugin exists first
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+        
         # Get optional election_id from query params or body
-        election_id_str = request.args.get('election_id') or (request.json.get('election_id') if request.json else None)
+        json_data = request.get_json(silent=True)
+        
+        # Check for malformed JSON if content type indicates JSON but we got None
+        # Only treat as malformed if there's actual data that failed to parse
+        if request.is_json and json_data is None and len(request.data) > 0:
+            return jsonify({'error': 'Malformed JSON in request body'}), 400
+        
+        # Check for JSON data without proper content type
+        if not request.is_json and len(request.data) > 0:
+            # Try to parse as JSON to see if it should have had content-type: application/json
+            try:
+                json.loads(request.data)
+                # If parsing succeeds, it should have had the proper content type
+                return jsonify({'error': 'JSON data requires Content-Type: application/json header'}), 400
+            except (json.JSONDecodeError, TypeError):
+                # Not JSON data, let it continue (might be form data or other content)
+                pass
+        
+        election_id_str = request.args.get('election_id') or (json_data.get('election_id') if json_data else None)
         election_id = int(election_id_str) if election_id_str else None
 
         result = plugin_manager.sync_plugin(plugin_name, election_id=election_id)
         return jsonify(result), 200
+    except (KeyError, TypeError, AttributeError) as e:
+        return jsonify({'error': str(e)}), 400
+    except ValueError as e:
+        return jsonify({'error': f'Invalid election_id: {str(e)}'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -602,6 +682,182 @@ def import_historical_plugin_data(plugin_name):
             'message': f'Historical import completed for {plugin_name}',
             'results': result
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/state/<state_code>', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_plugin_by_state(state_code):
+    """Get plugin by state code."""
+    try:
+        plugin = plugin_manager.get_plugin_by_state(state_code.upper())
+        if not plugin:
+            return jsonify({'error': f'No plugin found for state \'{state_code}\''}), 404
+        
+        return jsonify({
+            'name': plugin.name,
+            'state_code': plugin.state_code,
+            'description': plugin.description
+        }), 200
+    except KeyError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/sync-all', methods=['POST'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def sync_all_plugins():
+    """Sync all plugins."""
+    try:
+        results = plugin_manager.sync_all_plugins()
+        
+        # Check if any sync failed
+        any_failed = any(not result.get('success', True) for result in results.values())
+        
+        # Return appropriate status code
+        status_code = 207 if any_failed else 200  # Multi-status if some failed
+        
+        return jsonify(results), status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/<plugin_name>/upload', methods=['POST'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def upload_plugin_file(plugin_name):
+    """Upload file to a specific plugin."""
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+        
+        # Check if plugin has upload_file method
+        if not hasattr(plugin, 'upload_file'):
+            return jsonify({
+                'error': f'Plugin "{plugin_name}" does not support file uploads'
+            }), 400
+        
+        # Handle file upload
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Save file temporarily and pass to plugin
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
+            file.save(temp_file.name)
+            temp_filename = temp_file.name
+        
+        try:
+            result = plugin.upload_file(temp_filename)
+            return jsonify(result), 200
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_filename):
+                os.unlink(temp_filename)
+                
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/<plugin_name>/elections', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_plugin_elections(plugin_name):
+    """Get available elections for a specific plugin."""
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+        
+        # Check if plugin has get_available_elections method
+        if not hasattr(plugin, 'get_available_elections'):
+            return jsonify({
+                'error': f'Plugin "{plugin_name}" does not support election listing'
+            }), 400
+        
+        elections = plugin.get_available_elections()
+        return jsonify({
+            'plugin': plugin_name,
+            'elections': elections
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/<plugin_name>/status', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_plugin_status(plugin_name):
+    """Get status of a specific plugin."""
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+        
+        status = plugin.get_status()
+        return jsonify(status), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/status', methods=['GET'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def get_all_plugins_status():
+    """Get status of all plugins."""
+    try:
+        plugins = plugin_manager.list_plugins()
+        status_dict = {}
+        
+        for plugin_name in plugins:
+            plugin = plugin_manager.get_plugin(plugin_name)
+            if plugin:
+                status_dict[plugin_name] = plugin.get_status()
+        
+        return jsonify(status_dict), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/<plugin_name>/sync-file', methods=['POST'])
+@require_api_key
+@limiter.limit(get_api_key_limits)
+def sync_plugin_file(plugin_name):
+    """Sync plugin with file from URL."""
+    try:
+        plugin = plugin_manager.get_plugin(plugin_name)
+        if not plugin:
+            return jsonify({'error': f'Plugin "{plugin_name}" not found'}), 404
+        
+        # Get file URL from request
+        json_data = request.get_json(silent=True)
+        file_url = json_data.get('url') if json_data else request.form.get('url')
+        if not file_url:
+            return jsonify({'error': 'File URL required'}), 400
+        
+        # Check if plugin has sync_file method
+        if not hasattr(plugin, 'sync_file'):
+            return jsonify({
+                'error': f'Plugin "{plugin_name}" does not support file sync'
+            }), 400
+        
+        result = plugin.sync_file(file_url)
+        return jsonify(result), 200
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -761,6 +1017,14 @@ def bulk_delete_records():
         if invalid_types:
             return jsonify({'error': f'Invalid delete_types: {invalid_types}. Valid types are: {valid_types}'}), 400
         
+        # Safety check: require explicit confirmation for actual deletion
+        if not dry_run and confirm != 'DELETE':
+            return jsonify({
+                'error': 'Confirmation required. Set "confirm": "DELETE" to proceed with deletion',
+                'delete_types': delete_types,
+                'filters': filters
+            }), 400
+        
         results = {}
         total_count = 0
         
@@ -902,16 +1166,6 @@ def bulk_delete_records():
                 'results': {k: {'count': v['count']} for k, v in results.items()},
                 'dry_run': dry_run
             }), 200
-        
-        # Safety check: require explicit confirmation for actual deletion
-        if not dry_run:
-            if confirm != 'DELETE':
-                return jsonify({
-                    'error': 'Confirmation required. Set "confirm": "DELETE" to proceed with deletion',
-                    'total_count': total_count,
-                    'results': {k: {'count': v['count']} for k, v in results.items()},
-                    'dry_run': False
-                }), 400
         
         # Perform deletion or dry run
         if dry_run:
@@ -1628,7 +1882,8 @@ def admin_api_cache_stats():
 def admin_api_cache_clear():
     """API endpoint to clear cache"""
     try:
-        pattern = request.json.get('pattern', 'all') if request.json else 'all'
+        json_data = request.get_json(silent=True)
+        pattern = json_data.get('pattern', 'all') if json_data else 'all'
         
         if pattern == 'all':
             redis_cache_manager.clear()
@@ -2158,8 +2413,7 @@ with app.app_context():
             "Please change the password immediately at /admin/change-password"
         )
 
-    # Initialize plugin manager after models are defined
-    plugin_manager = PluginManager(app, db)
+    # Plugin manager already initialized above
     
     # Initialize Flask-Admin after models are defined
     try:
