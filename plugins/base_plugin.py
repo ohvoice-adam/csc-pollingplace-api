@@ -215,6 +215,8 @@ class BasePlugin(ABC):
         """
         Check if address fields have changed between existing and new polling place data.
         
+        Uses text normalization to avoid false positives from formatting differences.
+        
         Args:
             existing_data: Dictionary with existing polling place data
             new_data: Dictionary with new polling place data
@@ -228,8 +230,17 @@ class BasePlugin(ABC):
             existing_value = (existing_data.get(field, '') or '').strip()
             new_value = (new_data.get(field, '') or '').strip()
 
-            if existing_value != new_value:
-                return True
+            # Use normalization for address fields (except zip_code which should be exact)
+            if field == 'zip_code':
+                if existing_value != new_value:
+                    return True
+            else:
+                # Normalize text for comparison to avoid false positives
+                normalized_existing = self.normalize_text(existing_value)
+                normalized_new = self.normalize_text(new_value)
+                
+                if normalized_existing != normalized_new:
+                    return True
                 
         return False
 
