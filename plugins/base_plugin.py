@@ -230,9 +230,12 @@ class BasePlugin(ABC):
             existing_value = (existing_data.get(field, '') or '').strip()
             new_value = (new_data.get(field, '') or '').strip()
 
-            # Use normalization for address fields (except zip_code which should be exact)
+            # Use normalization for address fields (except zip_code which uses 5-digit matching)
             if field == 'zip_code':
-                if existing_value != new_value:
+                # Compare only first 5 digits of ZIP codes
+                existing_zip = existing_value[:5] if existing_value else ''
+                new_zip = new_value[:5] if new_value else ''
+                if existing_zip != new_zip:
                     return True
             else:
                 # Normalize text for comparison to avoid false positives
