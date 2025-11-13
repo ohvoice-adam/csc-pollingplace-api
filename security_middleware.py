@@ -193,6 +193,10 @@ class CSRFProtection:
         if request.path and request.path.startswith('/api/'):
             return
         
+        # Skip for admin login (Flask-Login handles CSRF)
+        if request.path and request.path.startswith('/admin/login'):
+            return
+        
         # Skip for static files
         if request.endpoint and request.endpoint == 'static':
             return
