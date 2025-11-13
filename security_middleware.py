@@ -197,6 +197,10 @@ class CSRFProtection:
         if request.path and request.path.startswith('/admin/login'):
             return
         
+        # Skip for admin plugin uploads (Flask-Admin handles CSRF)
+        if request.path and request.path.startswith('/admin/plugins/') and '/upload' in request.path:
+            return
+        
         # Skip for static files
         if request.endpoint and request.endpoint == 'static':
             return
